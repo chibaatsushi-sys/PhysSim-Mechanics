@@ -295,6 +295,15 @@ class Painter{
     c.restore();
     c.restore();
   }
+  /* 台車（本体＋車輪 2 つ）  xc=中心, yb=床, w,h=本体の幅・高さ, rw=車輪の半径 */
+  cartW(xc,yb,w,h,rw,fill,stroke,lw){
+    const st=stroke||COL.ink, LW=lw||2.2;
+    this.rectW(xc-w/2, yb+2*rw, w, h, fill||"#fff", st, LW, 3);
+    [xc-w*0.29, xc+w*0.29].forEach(x=>{
+      this.ball(x, yb+rw, rw, "#fff", st, LW*0.8);
+      this.ball(x, yb+rw, rw*0.40, "#fff", st, LW*0.7);
+    });
+  }
   /* 壁（縦のハッチング） */
   wall(x,y0,y1,side){
     const c=this.c; c.save(); c.strokeStyle="#333"; c.lineWidth=2.2;
@@ -862,7 +871,7 @@ class Sim{
     this.gcv=document.createElement("canvas"); gw.appendChild(this.gcv);
     this.gctx=this.gcv.getContext("2d");
     const cap=document.createElement("div"); cap.className="gcap";
-    cap.innerHTML="グラフ（アニメと連動・オレンジの縦線が現在時刻）：左＝運動量（または速度）の <i style=\"font-family:KaTeX_Math,serif\">x</i> 成分、右＝エネルギー。<br><span style=\"font-size:.92em\">エネルギーの<b>合計</b>は「2 物体の力学的エネルギーの総和"+(sc.springE?"（ばねの弾性エネルギーを含む）":"")+"」です。"+(sc.totalOffset===false?"":"線が重なって見えなくなるのを防ぐため、合計（太い黒線）は上に少しずらしています。")+"</span>";
+    cap.innerHTML="グラフ（アニメと連動・オレンジの縦線が現在時刻）：左＝運動量（または速度）の <i style=\"font-family:KaTeX_Math,serif\">x</i> 成分、右＝エネルギー。<br><span style=\"font-size:.92em\">エネルギーの<b>合計</b>は「2 物体の力学的エネルギーの総和"+(sc.springE?"（ばねの弾性エネルギーを含む）":(sc.eNoteG?"（"+sc.eNoteG+"）":""))+"」です。"+(sc.totalOffset===false?"":"線が重なって見えなくなるのを防ぐため、合計（太い黒線）は上に少しずらしています。")+"</span>";
     gw.appendChild(cap);
 
     this.ro=document.createElement("div"); this.ro.className="readout"; h.appendChild(this.ro);
@@ -883,11 +892,11 @@ class Sim{
     const OFF=(sc.totalOffset===false?0:-6);
     this.pSeries.push({label:"合計",col:COL.tot,vals:this.qs.map(q=>q.p.total),thick:true,off:OFF});
     if(q0.p.ylabel) this.pSeries.push({label:q0.p.ylabel,col:"#c0392b",vals:this.qs.map(q=>q.p.ytotal),dash:[5,4]});
-    this.vSeries=q0.p.parts.map((pp,k)=>({label:pp.label,col:pp.col,
+    this.vSeries=q0.p.parts.map((pp,k)=>({label:String(pp.label).split("p_x").join("v_x").split("p_y").join("v_y"),col:pp.col,
       vals:this.qs.map(q=>q.p.parts[k].val/(q.p.parts[k].mass||1))}));
     if(sc.showVG){
       const mtot=q0.p.parts.reduce((a,pp)=>a+(pp.mass||0),0)||1;
-      this.vSeries.push({label:"重心の速度",col:COL.tot,thick:true,
+      this.vSeries.push({label:"重心の速度の x 成分",col:COL.tot,thick:true,
         vals:this.qs.map(q=>q.p.total/mtot)});
     }
     this.eSeries=q0.e.parts.map((pp,k)=>({label:pp.label,col:pp.col,dash:pp.dash,vals:this.qs.map(q=>q.e.parts[k].val)}));
@@ -1131,45 +1140,57 @@ function NArrow(P,cx,ycon,N,FSC,lab,offpx){ P.vec(cx+(offpx||0)/P.s,ycon,0,-fLen
    問11 : 台車の中で、2 本のばねにつながれた小球が振動する
    ======================================================================= */
 function SC11(){
-  const m=1, M=3, k=40;
+  const m=1, M=3, kA=25, kB=15, k=kA+kB;   // 左右でばね定数が異なる
   const mu=m*M/(m+M), om=Math.sqrt(k/mu), A=0.45;
   const Xc=4.05;
   const T=2*Math.PI/om, tEnd=2.2*T;
-  const cw=2.60, ch=0.90, wt=0.16, fl=0.16;
-  const r=0.26, yb=fl+r;
-  const k1=k/2;                                  // ばね 1 本ぶんのばね定数
-  const yF1=ch+0.20, yF2=ch+0.60, yCap=ch+1.00, yVm=ch+1.42, yVM=ch+1.42;
+  const cw=2.60, rw=0.16, base=2*rw, ch=1.16, wt=0.14;   // 車輪・本体
+  const cTop=base+ch, flY=base+0.70;                     // 上は開いている／内側の床
+  const r=0.19, yb=flY+r;                                // 小球は内側の床の上
+  
+  const yF1=1.82, yF2=2.20, yCap=2.72, yVm=3.05, yVM=3.05;
   const st=(t)=>{
     const u=A*Math.cos(om*t), du=-A*om*Math.sin(om*t);
     return {xm:Xc+u*M/(m+M), xM:Xc-u*m/(m+M), vm:du*M/(m+M), vM:-du*m/(m+M), u, du};
   };
   return {
-    id:"q11", world:{x0:2.15,x1:5.95,y0:-1.25,y1:3.05}, minPxPerM:62, maxH:310, tEnd, springE:true,
+    id:"q1", world:{x0:2.15,x1:5.95,y0:-1.25,y1:4.15}, minPxPerM:62, maxH:392, tEnd, springE:true,
+    figWorld:{x0:2.35,x1:5.75,y0:-0.30,y1:2.10}, figH:205,
     totalOffset:false, showVG:true, cmFrame:true,
-    assume:'数値は $m=1.0$ kg（小球）、$M=3.0$ kg（台車）、2 本のばねの合成ばね定数 $k=40$ N/m、はじめのずれ 0.45 m として計算。床も台車の内側もなめらか。',
+    assume:'数値は $m=1.0$ kg（小球）、$M=3.0$ kg（台車）、ばね定数 $k_1=25$ N/m・$k_2=15$ N/m（合わせると $k_1+k_2=40$ N/m）、はじめのずれ 0.45 m として計算。床も台車の内側もなめらか。',
     slowmo:{label:'動き出しの瞬間', t0:0, t1:0.30, k:0.10},
     snaps:[{label:"(a) 手を放した直後",t:0.004},
            {label:"小球が台車の中央を通るとき",t:T/4},
            {label:"(b) 反対側にいちばん寄ったとき",t:T/2}],
     st,
-    preBubbles(s){ return [{x:s.xm+0.30,y:ch+1.62,text:"静止 v=0",col:COL.A},
-                           {x:s.xM-1.15,y:ch+1.62,text:"静止 V=0",col:COL.B}]; },
+    preBubbles(s){ return [{x:s.xm+0.45,y:3.46,text:"静止 v=0",col:COL.A},
+                           {x:s.xM-1.05,y:3.46,text:"静止 V=0",col:COL.B}]; },
     draw(P,s,t,o){
       P.ground(0,2.17,5.93);
-      if(o.cm) P.jtextW(2.20,-1.16,"■ 重心とともに動く観測者から見た運動（重心の速度は 0 なので見え方は同じ）",{size:10,col:"#7a5aa8",bold:true});
-      else P.jtextW(2.20,-1.16,"床も台車の内側もなめらか",{size:11,col:"#aab3bd",cap:1});
+      if(o.cm) P.jtextW(2.20,4.00,"■ 重心とともに動く観測者から見た運動（重心の速度は 0 なので見え方は同じ）",{size:10,col:"#7a5aa8",bold:true});
+      else P.jtextW(2.20,4.00,"床も台車の内側もなめらか",{size:11,col:"#aab3bd",cap:1});
       const xL=s.xM-cw/2, xR=s.xM+cw/2;
-      P.poly([[xL,0],[xR,0],[xR,ch],[xR-wt,ch],[xR-wt,fl],[xL+wt,fl],[xL+wt,ch],[xL,ch]],
-             "#f2f4f7",COL.ink,2.2);
-      P.spring(xL+wt,yb,s.xm-r,yb,6,5.0,"#0f7a5a",1.9);
-      P.spring(s.xm+r,yb,xR-wt,yb,6,5.0,"#0f7a5a",1.9);
-      if(!o.started){
-        P.jtextW((xL+wt+s.xm-r)/2,-0.44,"ばね",{size:11,col:"#0f7a5a",align:"center",bold:true});
-        P.jtextW((s.xm+r+xR-wt)/2,-0.44,"ばね",{size:11,col:"#0f7a5a",align:"center",bold:true});
+      /* 台車：上が開いた U 字＋車輪 */
+      P.poly([[xL,base],[xR,base],[xR,cTop],[xR-wt,cTop],[xR-wt,flY],[xL+wt,flY],[xL+wt,cTop],[xL,cTop]],
+             "#f2f4f7",COL.ink,2.4);
+      [xL+cw*0.24, xR-cw*0.24].forEach(x=>{
+        P.ball(x,rw,rw,"#fff",COL.ink,2.0); P.ball(x,rw,rw*0.40,"#fff",COL.ink,1.6); });
+      P.spring(xL+wt,yb,s.xm-r,yb,7,4.4,"#0f7a5a",1.9);
+      P.spring(s.xm+r,yb,xR-wt,yb,5,4.4,"#0f7a5a",1.9);
+      if(o.figure){
+        P.jtextW(s.xm+0.74,yb+0.66,"小球",{size:12,col:"#1b1f24",align:"center"});
+        P.line(s.xm+0.56,yb+0.58,s.xm+0.14,yb+0.16,"#8b96a2",1.1);
+        P.jtextW(s.xM,base+0.34,"台車",{size:13,col:"#1b1f24",align:"center"});
+        P.mtextW((xL+wt+s.xm-r)/2,yb+0.42,"k_1",{size:14,col:"#0f7a5a",align:"center"});
+        P.mtextW((s.xm+r+xR-wt)/2,yb+0.42,"k_2",{size:14,col:"#0f7a5a",align:"center"});
+      }else if(!o.started){
+        P.mtextW((xL+wt+s.xm-r)/2,cTop+0.24,"k_1",{size:14,col:"#0f7a5a",align:"center"});
+        P.mtextW((s.xm+r+xR-wt)/2,cTop+0.24,"k_2",{size:14,col:"#0f7a5a",align:"center"});
+        P.jtextW(s.xM,base+0.34,"台車",{size:12,col:"#8b96a2",align:"center"});
       }
       P.ball(s.xm,yb,r,"#fff",COL.ink,2.2);
-      if(o.labels){ P.mtextW(s.xm,yb+r+0.16,"m",{size:15,align:"center",col:COL.A});
-        P.mtextW(xL-0.12,ch*0.55,"M",{size:15,align:"right",col:COL.B}); }
+      if(o.labels){ P.mtextW(s.xm,yb+r+0.30,"m",{size:15,align:"center",col:COL.A});
+        P.mtextW(xL-0.14,base+ch*0.55,"M",{size:15,align:"right",col:COL.B}); }
       vArrow(P,s.xm,yVm,s.vm,26,"v",COL.v,0,true);
       vArrow(P,s.xM-cw*0.40,yVM,s.vM,26,"V",COL.v,0,true);
       if(!o.figure && !o.snap){
@@ -1183,22 +1204,21 @@ function SC11(){
         P.jtextW(Xc,-0.92,"重心（動かない）",{size:10.5,col:"#c0392b",align:"center"});
       }
       if(o.inner!==false && Math.abs(s.u)>0.015){
-        /* ばねは 2 本 → 弾性力は全部で 4 つ（どれも大きさは k1|u| で等しい）
-           矢印の始点は「ばねと物体の接点の真上」に置く                       */
-        const Ls=k1*s.u*4.4, dw=Ls*P.k/(2*P.s);
-        const pairs=[[xL+wt, yF1,  Ls],[s.xm-r, yF1, -Ls],
-                     [s.xm+r, yF2, -Ls],[xR-wt, yF2,  Ls]];
+        /* ばねは 2 本 → 弾性力は全部で 4 つ。同じばねの両端は等しく、左右では大きさが違う */
+        const LA=kA*s.u*4.4, LB=kB*s.u*4.4;
+        const pairs=[[xL+wt, yF1,  LA],[s.xm-r, yF1, -LA],
+                     [s.xm+r, yF2, -LB],[xR-wt, yF2,  LB]];
         pairs.forEach(([x,y,L])=>{
           P.c.save(); P.c.strokeStyle="#f3b6da"; P.c.setLineDash([2,3]); P.c.lineWidth=1;
           P.c.beginPath(); P.c.moveTo(P.X(x),P.Y(yb)); P.c.lineTo(P.X(x),P.Y(y)); P.c.stroke(); P.c.restore();
           P.arrowPx(x,y,L,0,COL.inner,2.8,10);
           P.mtextW(x+L*P.k/(2*P.s), y+0.22,"F",{col:COL.inner,size:13.5,align:"center"});
         });
-        P.jtextW(s.xM,yCap,o.snap?"ばねの弾性力（内力）":"ばねの弾性力（内力）… 4 つとも大きさは同じ",{size:10.5,col:COL.inner,align:"center"});
+        P.jtextW(s.xM,yCap,o.snap?"ばねの弾性力（内力）":"ばねの弾性力（内力）… 同じばねの両端は大きさが等しい",{size:10.5,col:COL.inner,align:"center"});
       }
       if(o.allForces){
         mgArrow(P,s.xm+3/P.s,yb,m,2.0,"mg");
-        mgArrow(P,s.xM+cw*0.34,ch*0.5,M,2.0,"Mg");
+        mgArrow(P,s.xM+cw*0.34,base+ch*0.42,M,2.0,"Mg");
         NArrow(P,s.xM+cw*0.34,0,(m+M)*G,2.0,"N",-10);
       }
     },
@@ -1211,11 +1231,11 @@ function SC11(){
                         {label:"ばねの弾性エネルギー",col:COL.U,val:U}],total:K1+K2+U}};},
     events:[
       {t0:0.02,t1:T/4,col:COL.inner,bub:"内力！\n（ばねの弾性力）",
-       text:"ばねは 2 本あるので、弾性力は<b>全部で 4 つ</b>（左のばねが小球と左の壁を引き、右のばねが小球と右の壁を押す）。どれも大きさは等しく、すべて<b>内力</b>である。床はなめらかで水平方向の外力はないので、運動量の総和ははじめの $0$ のまま。したがって<b>重心は動かない</b>。",
-       at:(s)=>[s.xM, ch+1.66]},
+       text:"ばねは 2 本あるので、弾性力は<b>全部で 4 つ</b>（左のばねが小球と左の壁を引き、右のばねが小球と右の壁を押す）。<b>同じばねの両端にはたらく 2 力は大きさが等しく向きが逆</b>だが、$k_1 \\ne k_2$ なので左右のばねの力の大きさはちがう。4 つとも<b>内力</b>である。床はなめらかで水平方向の外力はないので、運動量の総和ははじめの $0$ のまま。したがって<b>重心は動かない</b>。",
+       at:(s)=>[s.xM, 3.46]},
       {t0:T/4,t1:tEnd,bubT1:T/4+0.5,col:COL.C,bub:"重心は動かない",
        text:"小球が右へ動けば台車は左へ動く。$m v + M V = 0$ が保たれるので $|V|=\\dfrac{m}{M}|v|$。ばねの弾性力は<b>保存力</b>だから、力学的エネルギーの総和も一定である。",
-       at:(s)=>[s.xM, ch+1.66]}
+       at:(s)=>[s.xM, 3.46]}
     ]
   };
 }
@@ -1224,7 +1244,7 @@ function SC11(){
    問12 : 壁にばねでつながれた台車 A に、台車 B が弾性衝突する
    ======================================================================= */
 function SC12(){
-  const m=1, k=50, v0=2.0, w=0.62, h=0.50;
+  const m=1, k=50, v0=2.0, w=0.72, h=0.44, rw=0.11, yb=2*rw, hh=yb+h;
   const Xw=6.05, xA0=5.10, xB0=3.30;
   const DT=0.22, omc=Math.PI/DT, kc=(m/2)*omc*omc;
   const t1=(xA0-w-xB0)/v0;
@@ -1253,7 +1273,8 @@ function SC12(){
     return {xA:xA0, xB:xB0f-v0*(t-t3), vA:0, vB:-v0, u:0, contact:false, def:0, ph:4};
   };
   return {
-    id:"q12", world:{x0:2.55,x1:6.45,y0:-1.45,y1:2.55}, minPxPerM:76, maxH:285, tEnd, springE:true,
+    id:"q2", world:{x0:2.55,x1:6.45,y0:-1.45,y1:2.85}, minPxPerM:76, maxH:306, tEnd, springE:true,
+    figWorld:{x0:2.60,x1:6.40,y0:-0.30,y1:1.75}, figH:200,
     totalOffset:false, showVG:true, cmFrame:true,
     assume:'数値は $m=1.0$ kg（A・B とも同じ質量）、$v_0=2.0$ m/s、ばね定数 $k=50$ N/m、衝突は弾性衝突（接触時間 $\\Delta t=0.22$ s）として計算。床はなめらか。',
     slowmo:{label:'1 回目の衝突の瞬間', t0:Math.max(0,t1-0.05), t1:t1+DT+0.10, k:0.10},
@@ -1261,7 +1282,7 @@ function SC12(){
            {label:"衝突直後（B は静止）",t:t1+DT+0.02},
            {label:"(b) ばねが最も縮んだとき",t:tMax}],
     st,
-    preBubbles(s){ return [{x:s.xA,y:h+1.18,text:"静止 v=0",col:COL.A}]; },
+    preBubbles(s){ return [{x:s.xA,y:hh+1.30,text:"静止 v=0",col:COL.A}]; },
     draw(P,s,t,o){
       const XG=(s.xA+s.xB)/2, VG=(s.vA+s.vB)/2;
       DX12 = o.cm ? (XG-XG0) : 0;
@@ -1269,12 +1290,14 @@ function SC12(){
       const vA=o.cm? s.vA-VG : s.vA, vB=o.cm? s.vB-VG : s.vB;
       P.ground(0,2.57,6.43,null, o.cm? -DX12*P.s : 0);
       if(o.cm) P.jtextW(2.60,-1.30,"■ 重心とともに動く観測者から見た運動（グラフは地面から見た値）",{size:10.5,col:"#7a5aa8",bold:true});
-      else P.jtextW(2.63,2.28,"床はなめらか",{size:11,col:"#aab3bd",cap:1});
+      else P.jtextW(2.63,2.70,"床はなめらか",{size:11,col:"#aab3bd",cap:1});
       P.wall(XwD,0,1.60,1);
-      P.spring(xA+w/2,h*0.55,XwD,h*0.55,8,6,"#0f7a5a",2);
-      if(!o.started) P.jtextW((xA+w/2+XwD)/2,-0.44,"ばね",{size:11.5,col:"#0f7a5a",align:"center",bold:true});
-      P.rectW(xB-w/2,0,w,h,"#fff",COL.ink,2.2,2);
-      P.rectW(xA-w/2,0,w,h,"#fff",COL.ink,2.2,2);
+      P.spring(xA+w/2,yb+h*0.55,XwD,yb+h*0.55,8,6,"#0f7a5a",2);
+      if(!o.started) P.jtextW((xA+w/2+XwD)/2,hh+0.24,"ばね",{size:11.5,col:"#0f7a5a",align:"center",bold:true});
+      P.cartW(xB,0,w,h,rw,"#fff",COL.ink,2.2);
+      P.cartW(xA,0,w,h,rw,"#fff",COL.ink,2.2);
+      if(o.figure){ P.jtextW(xA,yb+h*0.45,"A",{size:12,col:COL.A,align:"center",bold:true});
+        P.jtextW(xB,yb+h*0.45,"B",{size:12,col:COL.B,align:"center",bold:true}); }
       if(!o.figure && !o.snap){
         const xg=XG-DX12;
         P.c.save(); P.c.strokeStyle="#e6b0b0"; P.c.setLineDash([3,3]); P.c.lineWidth=1;
@@ -1282,29 +1305,29 @@ function SC12(){
         P.observer(xg,-0.94,"重心系の観測者","#7a5aa8");
         P.jtextW(xg+0.16,-0.30,"重心",{size:10.5,col:"#c0392b"});
       }
-      if(o.labels){ P.mtextW(xA,h+0.92,"A:m",{size:15,align:"center",col:COL.A});
-        P.mtextW(xB,h+0.92,"B:m",{size:15,align:"center",col:COL.B}); }
-      vArrow(P,xA,h+0.20,vA,26,"v_A",COL.v,0,true);
-      vArrow(P,xB,h+0.20,vB,26,"v_B",COL.v,0,true);
+      if(o.labels){ P.mtextW(xA,hh+0.98,"A:m",{size:15,align:"center",col:COL.A});
+        P.mtextW(xB,hh+0.98,"B:m",{size:15,align:"center",col:COL.B}); }
+      vArrow(P,xA,hh+0.26,vA,26,"v_A",COL.v,0,true);
+      vArrow(P,xB,hh+0.26,vB,26,"v_B",COL.v,0,true);
       if(o.inner!==false && s.contact){
         const F=kc*s.def, L=Math.min(56,Math.abs(F)*0.75), xc=(xA+xB)/2;
-        P.arrowPx(xc,h*0.58,-L,0,COL.inner,3.0,11);
-        P.arrowPx(xc,h*0.58, L,0,COL.inner,3.0,11);
+        P.arrowPx(xc,yb+h*0.58,-L,0,COL.inner,3.0,11);
+        P.arrowPx(xc,yb+h*0.58, L,0,COL.inner,3.0,11);
         const dw=L*P.k/(2*P.s);
-        P.mtextW(xc-dw,h*0.58+0.30,"F",{col:COL.inner,size:14,align:"center"});
-        P.mtextW(xc+dw,h*0.58+0.30,"F",{col:COL.inner,size:14,align:"center"});
-        P.c.save(); P.c.beginPath(); P.c.arc(P.X(xc),P.Y(h*0.58),4.2,0,7); P.c.fillStyle=COL.inner; P.c.fill(); P.c.restore();
-        P.jtextW(xc,h+1.02,"内力（作用・反作用）",{size:10.5,col:COL.inner,align:"center"});
+        P.mtextW(xc-dw,yb+h*0.58+0.30,"F",{col:COL.inner,size:14,align:"center"});
+        P.mtextW(xc+dw,yb+h*0.58+0.30,"F",{col:COL.inner,size:14,align:"center"});
+        P.c.save(); P.c.beginPath(); P.c.arc(P.X(xc),P.Y(yb+h*0.58),4.2,0,7); P.c.fillStyle=COL.inner; P.c.fill(); P.c.restore();
+        P.jtextW(xc,hh+1.08,"内力（作用・反作用）",{size:10.5,col:COL.inner,align:"center"});
       }
       if(o.inner!==false && !s.contact && Math.abs(s.u)>0.02){
         const F=-k*s.u, L=Math.abs(F)*1.3*(F>=0?1:-1);
-        P.arrowPx(xA+w/2,h*0.58,L,0,COL.B,2.8,11);
-        P.mtextW(xA+w/2+L*P.k/(2*P.s),h*0.58+0.30,"F",{col:COL.B,size:14,align:"center"});
-        P.jtextW(XwD-0.75,-0.48,"外力（壁からの力）",{size:10.5,col:COL.B,align:"center"});
+        P.arrowPx(xA+w/2,yb+h*0.58,L,0,COL.B,2.8,11);
+        P.mtextW(xA+w/2+L*P.k/(2*P.s),yb+h*0.58+0.30,"F",{col:COL.B,size:14,align:"center"});
+        P.jtextW(XwD-0.95,hh+0.66,"外力（壁からの力）",{size:10.5,col:COL.B,align:"center"});
       }
       if(o.allForces){
-        mgArrow(P,xA+3/P.s,h/2,m,3.0,"mg"); NArrow(P,xA,0,m*G,3.0,"N",-8);
-        mgArrow(P,xB+3/P.s,h/2,m,3.0,"mg"); NArrow(P,xB,0,m*G,3.0,"N",-8);
+        mgArrow(P,xA+3/P.s,yb+h/2,m,3.0,"mg"); NArrow(P,xA,0,m*G,3.0,"N",-10);
+        mgArrow(P,xB+3/P.s,yb+h/2,m,3.0,"mg"); NArrow(P,xB,0,m*G,3.0,"N",-10);
       }
     },
     readout(s,t){ return [{k:MV("v","A"),v:fmt(s.vA,2),u:"m/s"},{k:MV("v","B"),v:fmt(s.vB,2),u:"m/s"},
@@ -1318,13 +1341,13 @@ function SC12(){
     events:[
       {t0:t1,t1:t1+DT,col:COL.inner,bub:"この一瞬だけは内力だけ",
        text:"衝突の瞬間だけを見れば、はたらくのは A と B が押し合う<b>内力</b>だけ（ばねはまだ自然長で力は $0$）。だからこの一瞬では運動量は保存され、同質量の弾性衝突なので<b>速度が入れかわる</b>。",
-       at:(s)=>[(s.xA+s.xB)/2-DX12, h+1.34]},
+       at:(s)=>[(s.xA+s.xB)/2-DX12, hh+1.42]},
       {t0:t1+DT,t1:t2,col:COL.B,bub:"外力！\n（壁がばねを通しておよぼす力）",
        text:"A がばねを縮め始めると、<b>壁</b>がばねを通して系に力をおよぼす。これは<b>外力</b>だから、(a) から (b) までを通して見ると運動量の総和は保存されない（$mv_0 \\to 0$）。いっぽうばねの弾性力は<b>保存力</b>で床もなめらかなので、力学的エネルギーの総和は保存される。",
-       at:(s)=>[s.xA-DX12, h+1.34]},
+       at:(s)=>[s.xA-DX12, hh+1.42]},
       {t0:t2,t1:tEnd,bubT1:t2+0.6,col:COL.C,bub:"はね返されて B が戻っていく",
        text:"ばねが A を押し返し、A はふたたび B に衝突して静止する。B は速さ $v_0$ で逆向きに走り去る。運動量の総和は $+mv_0 \\to -mv_0$ と<b>向きが逆になった</b>。壁（＝地球）が外力の力積を与えたからである。力学的エネルギーは最初から最後まで一定。",
-       at:(s)=>[s.xB-DX12, h+1.34]}
+       at:(s)=>[s.xB-DX12, hh+1.42]}
     ]
   };
 }
@@ -1333,11 +1356,11 @@ function SC12(){
    問13 : 上から落ちてきた小球が、自由に動ける斜め台の斜面ではね返る
    ======================================================================= */
 function SC13(){
-  const m=1, M=3, v0=4.0, e=0.6, th=Math.PI/4;        // 傾角 45°、はねかえり係数 0.6
+  const m=1, M=3, v0=4.0, e=1.0, th=Math.PI/6;        // 傾角 30°、はねかえり係数 1（弾性衝突）
   const sn=Math.sin(th), cs=Math.cos(th);
   const J=(1+e)*v0*cs/(1/m+sn*sn/M);                  // 真下向きに落ちてきた場合
   const vx1=-J*sn/m, vy1=-v0+J*cs/m, Vx1=J*sn/M;
-  const h=1.50, bs=h/Math.tan(th), r=0.20, Xw0=4.20;
+  const h=1.10, bs=h/Math.tan(th), r=0.20, Xw0=4.05;
   const f=0.55, Cx=Xw0+f*bs, Cy=f*h;
   const bxC=Cx-r*sn, byC=Cy+r*cs;
   const tHit=v0/G, DT=0.05;
@@ -1360,24 +1383,25 @@ function SC13(){
             vbx:vx1, vby:vy1-G*tau, Xw:XwE+Vx1*tau, VX:Vx1};
   };
   return {
-    id:"q13", world:{x0:2.95,x1:7.15,y0:-1.35,y1:2.95}, minPxPerM:66, maxH:305, tEnd,
-    totalOffset:false, showVG:true, cmFrame:true, figT:tHit-0.004,
-    assume:'数値は $m=1.0$ kg（小球）、$M=3.0$ kg（斜め台）、$\\theta=45^\\circ$、'+
-           '斜面に当たる直前の速さ $v_0=4.0$ m/s（真下向き）、斜面に垂直な向きのはねかえり係数 $e=0.6$ として計算。床も斜面もなめらか。',
+    id:"q3", world:{x0:2.70,x1:7.15,y0:-1.35,y1:2.95}, minPxPerM:62, maxH:305, tEnd,
+    totalOffset:false, showVG:true, cmFrame:true, figT:0.004,
+    assume:'数値は $m=1.0$ kg（小球）、$M=3.0$ kg（斜め台）、$\\theta=30^\\circ$、'+
+           '落とす高さ $0.82$ m（斜面に当たる直前の速さ $v_0=4.0$ m/s）、斜面に垂直な向きのはねかえり係数 $e=1$ として計算。床も斜面もなめらか。',
     slowmo:{label:'衝突の瞬間', t0:Math.max(0,tHit-0.06), t1:tHit+DT+0.10, k:0.08},
-    snaps:[{label:"(a) 衝突直前",t:tHit-0.005},
+    snaps:[{label:"(a) 小球が最初の高さにあるとき",t:0.004},
            {label:"衝突中（床から力積を受ける）",t:tHit+DT*0.5},
            {label:"(b) はね返った直後",t:tHit+DT+0.01}],
     st,
-    preBubbles(s){ return [{x:s.Xw+bs+0.55,y:h*0.55+0.72,text:"静止 V=0",col:COL.B}]; },
+    preBubbles(s){ return [{x:s.Xw+bs+0.60,y:h*0.55+0.80,text:"静止 V=0",col:COL.B},
+                           {x:bxC-0.05,y:y0+0.34,text:"静かに放す",col:COL.A}]; },
     draw(P,s,t,o){
       const XG=(m*s.bx+M*(s.Xw+bs/2))/(m+M);
       DX = o.cm ? (XG-XG0) : 0;
       const bx=s.bx-DX, Xw=s.Xw-DX;
       const VG=(m*s.vbx+M*s.VX)/(m+M);
       const vbx=o.cm? s.vbx-VG : s.vbx, VX=o.cm? s.VX-VG : s.VX;
-      P.ground(0,2.97,7.13, null, o.cm? -DX*P.s : 0);
-      P.jtextW(3.03,2.46,"床も斜面もなめらか",{size:11,col:"#aab3bd",cap:1});
+      P.ground(0,2.72,7.13, null, o.cm? -DX*P.s : 0);
+      P.jtextW(2.76,2.46,"床も斜面もなめらか",{size:11,col:"#aab3bd",cap:1});
       if(o.figure){                                    // 落ちてきた道すじ（破線）
         P.c.save(); P.c.strokeStyle="#c9d6e4"; P.c.setLineDash([4,4]); P.c.lineWidth=1.2;
         P.c.beginPath(); P.c.moveTo(P.X(bxC),P.Y(y0)); P.c.lineTo(P.X(bxC),P.Y(byC)); P.c.stroke(); P.c.restore();
@@ -1386,7 +1410,7 @@ function SC13(){
       P.ball(bx,s.by,r,"#fff",COL.ink,2.2);
       if(o.labels){ P.mtextW(bx-0.34,s.by+0.02,"m",{size:15,align:"center",col:COL.A});
         P.mtextW(Xw+bs*0.74,h*0.22,"M",{size:15,align:"center",col:COL.B}); }
-      if(!o.snap && !o.figure) P.jtextW(Xw+bs*0.60,h*0.60,"θ=45°",{size:10.5,col:"#8b96a2"});
+      if(!o.snap && !o.figure) P.jtextW(Xw+bs*0.55,h*0.42,"θ=30°",{size:10.5,col:"#8b96a2"});
       { const VS=17, dx=vbx*VS, dy=-s.vby*VS, len=Math.hypot(dx,dy);
         if(len>5){
           if(s.ph<=0){ const y1=s.by+r+len/P.s;
@@ -1394,14 +1418,14 @@ function SC13(){
             P.mtextW(bx-0.28,y1-0.10,"v_0",{col:COL.v,size:14,align:"center"});
           } else P.vec(bx,s.by,dx,dy,COL.v,"v'",{off:12,lw:2.6,head:13});
         } }
-      vArrow(P,Xw+bs+0.52,h*0.55,VX,26,"V",COL.B,0,true);
+      vArrow(P,Xw+bs+0.58,h*0.55,VX,26,"V",COL.B,0,true);
       if(!o.figure && !o.snap){
         const xg=XG-DX;
         P.c.save(); P.c.strokeStyle="#e6b0b0"; P.c.setLineDash([3,3]); P.c.lineWidth=1;
         P.c.beginPath(); P.c.moveTo(P.X(xg),P.Y(0)); P.c.lineTo(P.X(xg),P.Y(-0.56)); P.c.stroke(); P.c.restore();
         P.observer(xg,-0.94,"重心系の観測者","#7a5aa8");
         P.jtextW(xg+0.16,-0.30,"重心",{size:10.5,col:"#c0392b"});
-        if(o.cm) P.jtextW(3.03,-1.24,"■ 重心とともに動く観測者から見た運動（グラフは地面から見た値）",{size:10.5,col:"#7a5aa8",bold:true});
+        if(o.cm) P.jtextW(2.76,-1.24,"■ 重心とともに動く観測者から見た運動（グラフは地面から見た値）",{size:10.5,col:"#7a5aa8",bold:true});
       }
       if(o.inner!==false && s.ph===1){
         const L=48, ux=-sn, uy=cs;
@@ -1429,14 +1453,14 @@ function SC13(){
                  total:p1+p2, ylabel:"合計 p_y", ytotal:m*s.vby},
               e:{parts:[{label:"小球の K",col:COL.A,val:K1},{label:"台の K",col:COL.B,val:K2},
                         {label:"重力の位置エネルギー",col:COL.U,val:U},
-                        {label:"変形のエネルギー",col:COL.lost,val:D}],total:K1+K2+U+D}};},
+                        {label:"接触中の変形のエネルギー",col:COL.lost,val:D}],total:K1+K2+U+D}};},
     events:[
       {t0:tHit,t1:tHit+DT+0.25,col:COL.N,bub:"外力！\n（床からの垂直抗力）",
-       text:"2 物体の間ではたらくのは<b>斜面に垂直な抗力（内力）</b>だけ。いっぽう床は台に<b>鉛直上向きの大きな垂直抗力</b>をおよぼす。これは外力なので鉛直方向の運動量は保存されない（$-mv_0 \\to -0.13mv_0$ 程度に減る）。<b>水平方向には外力がない</b>ので、水平成分の和は $0$ のまま保存される。",
-       at:(s)=>[s.Xw-DX+bs*0.35, h+0.85]},
-      {t0:tHit+DT+0.25,t1:tEnd,bubT1:tHit+DT+0.9,col:COL.U,bub:"力学的エネルギーは減った",
-       text:"斜面はなめらかだが、はねかえり係数が $e=0.6\\;(\\lt 1)$ なので、衝突のときに<b>変形などで力学的エネルギーが失われる</b>。水平方向の運動量が保存されることと、エネルギーが保存されないことは<b>別の話</b>である。",
-       at:(s)=>[s.Xw-DX+bs*0.5, h+0.55]}
+       text:"2 物体の間ではたらくのは<b>斜面に垂直な抗力（内力）</b>だけ。いっぽう床は台に<b>鉛直上向きの大きな垂直抗力</b>をおよぼす。これは外力なので鉛直方向の運動量は保存されない。<b>水平方向には外力がない</b>ので、水平成分の和ははじめの $0$ のまま保存される。",
+       at:(s)=>[s.Xw-DX+bs*0.35, h+0.95]},
+      {t0:tHit+DT+0.25,t1:tEnd,bubT1:tHit+DT+0.9,col:COL.U,bub:"力学的エネルギーは保存",
+       text:"斜面も床もなめらかで、はねかえり係数は $e=1$（弾性衝突）。非保存力の仕事はないので、<b>力学的エネルギーの総和は最初から最後まで一定</b>である。「水平方向の運動量しか保存されない」ことと「エネルギーは保存される」ことは<b>別の話</b>である。",
+       at:(s)=>[s.Xw-DX+bs*0.5, h+0.65]}
     ]
   };
 }
@@ -1445,11 +1469,11 @@ function SC13(){
    問14 : ストッパーで固定された斜め台に、上から小球が落ちてはね返る
    ======================================================================= */
 function SC14(){
-  const m=1, M=3, v0=4.0, e=0.6, th=Math.PI/4;
+  const m=1, M=3, v0=4.0, e=1.0, th=Math.PI/6;
   const sn=Math.sin(th), cs=Math.cos(th);
   const J=(1+e)*m*v0*cs;                      // 台は固定（M→∞ とみなす）
   const vx1=-J*sn/m, vy1=-v0+J*cs/m;
-  const h=1.50, bs=h/Math.tan(th), r=0.20, Xw=4.20;
+  const h=1.10, bs=h/Math.tan(th), r=0.20, Xw=4.05;
   const f=0.55, Cx=Xw+f*bs, Cy=f*h;
   const bxC=Cx-r*sn, byC=Cy+r*cs;
   const tHit=v0/G, DT=0.05;
@@ -1468,24 +1492,25 @@ function SC14(){
     return {ph:2, bx:bxC+vx1*tau, by:byC+vy1*tau-0.5*G*tau*tau, vbx:vx1, vby:vy1-G*tau, VX:0};
   };
   return {
-    id:"q14", world:{x0:2.95,x1:7.15,y0:-1.35,y1:2.95}, minPxPerM:66, maxH:305, tEnd,
-    totalOffset:false, showVG:true, cmFrame:true, figT:tHit-0.004,
-    assume:'数値は $m=1.0$ kg（小球）、$M=3.0$ kg（斜め台・ストッパーで固定）、$\\theta=45^\\circ$、'+
-           '斜面に当たる直前の速さ $v_0=4.0$ m/s（真下向き）、はねかえり係数 $e=0.6$ として計算。斜面はなめらか。',
+    id:"q4", world:{x0:2.70,x1:7.15,y0:-1.35,y1:2.95}, minPxPerM:62, maxH:305, tEnd,
+    totalOffset:false, showVG:true, cmFrame:true, figT:0.004,
+    assume:'数値は $m=1.0$ kg（小球）、$M=3.0$ kg（斜め台・ストッパーで固定）、$\\theta=30^\\circ$、'+
+           '落とす高さ $0.82$ m（斜面に当たる直前の速さ $v_0=4.0$ m/s）、はねかえり係数 $e=1$ として計算。斜面はなめらか。',
     slowmo:{label:'衝突の瞬間', t0:Math.max(0,tHit-0.06), t1:tHit+DT+0.10, k:0.08},
-    snaps:[{label:"(a) 衝突直前",t:tHit-0.005},
+    snaps:[{label:"(a) 小球が最初の高さにあるとき",t:0.004},
            {label:"衝突中（ストッパーが台を止める）",t:tHit+DT*0.5},
            {label:"(b) はね返った直後",t:tHit+DT+0.01}],
     st,
-    preBubbles(s){ return [{x:Xw+bs+0.60,y:h*0.55+0.72,text:"固定されて動かない",col:COL.B}]; },
+    preBubbles(s){ return [{x:Xw+bs+0.70,y:h*0.55+0.80,text:"固定されて動かない",col:COL.B},
+                           {x:bxC-0.05,y:y0+0.34,text:"静かに放す",col:COL.A}]; },
     draw(P,s,t,o){
       const XG=(m*s.bx+M*(Xw+bs/2))/(m+M), VG=(m*s.vbx)/(m+M);
       DX14 = o.cm ? (XG-XG0) : 0;
       const bx=s.bx-DX14, XwD=Xw-DX14;
       const vbx=o.cm? s.vbx-VG : s.vbx;
-      P.ground(0,2.97,7.13, null, o.cm? -DX14*P.s : 0);
-      if(o.cm) P.jtextW(3.03,-1.24,"■ 重心とともに動く観測者から見た運動（グラフは地面から見た値）",{size:10.5,col:"#7a5aa8",bold:true});
-      else P.jtextW(3.03,2.46,"斜面はなめらか。台はストッパーで固定",{size:11,col:"#aab3bd",cap:1});
+      P.ground(0,2.72,7.13, null, o.cm? -DX14*P.s : 0);
+      if(o.cm) P.jtextW(2.76,-1.24,"■ 重心とともに動く観測者から見た運動（グラフは地面から見た値）",{size:10.5,col:"#7a5aa8",bold:true});
+      else P.jtextW(2.76,2.46,"斜面はなめらか。台はストッパーで固定",{size:11,col:"#aab3bd",cap:1});
       if(o.figure){
         P.c.save(); P.c.strokeStyle="#c9d6e4"; P.c.setLineDash([4,4]); P.c.lineWidth=1.2;
         P.c.beginPath(); P.c.moveTo(P.X(bxC),P.Y(y0)); P.c.lineTo(P.X(bxC),P.Y(byC)); P.c.stroke(); P.c.restore();
@@ -1497,7 +1522,7 @@ function SC14(){
       P.ball(bx,s.by,r,"#fff",COL.ink,2.2);
       if(o.labels){ P.mtextW(bx-0.34,s.by+0.02,"m",{size:15,align:"center",col:COL.A});
         P.mtextW(XwD+bs*0.74,h*0.22,"M",{size:15,align:"center",col:COL.B}); }
-      if(!o.snap && !o.figure) P.jtextW(XwD+bs*0.60,h*0.60,"θ=45°",{size:10.5,col:"#8b96a2"});
+      if(!o.snap && !o.figure) P.jtextW(XwD+bs*0.55,h*0.42,"θ=30°",{size:10.5,col:"#8b96a2"});
       { const VS=17, dx=vbx*VS, dy=-s.vby*VS, len=Math.hypot(dx,dy);
         if(len>5){
           if(s.ph<=0){ const y1=s.by+r+len/P.s;
@@ -1538,20 +1563,658 @@ function SC14(){
                  total:p1+p2, ylabel:"合計 p_y", ytotal:m*s.vby},
               e:{parts:[{label:"小球の K",col:COL.A,val:K1},{label:"台の K",col:COL.B,val:K2},
                         {label:"重力の位置エネルギー",col:COL.U,val:U},
-                        {label:"変形のエネルギー",col:COL.lost,val:D}],total:K1+K2+U+D}};},
+                        {label:"接触中の変形のエネルギー",col:COL.lost,val:D}],total:K1+K2+U+D}};},
     events:[
       {t0:tHit,t1:tHit+DT+0.25,col:COL.B,bub:"外力！\n（ストッパー・床）",
-       text:"斜面が小球を押し返すとき、その反作用で台は斜め下に押される。台が動かないのは<b>ストッパーと床（＝地球）</b>が支えているから。これは<b>外力</b>なので、<b>水平方向も鉛直方向も</b>運動量は保存されない（水平は $0 \\to -3.2$、鉛直は $-4 \\to -0.8$）。",
-       at:(s)=>[Xw-DX14+bs*0.35, h+0.85]},
-      {t0:tHit+DT+0.25,t1:tEnd,bubT1:tHit+DT+0.9,col:COL.U,bub:"力学的エネルギーも減った",
-       text:"はねかえり係数が $e=0.6\\;(\\lt 1)$ なので、衝突で力学的エネルギーも失われる。<b>①も②も成り立たない</b>、適用範囲の図でいちばん外側の場合である。",
-       at:(s)=>[Xw-DX14+bs*0.5, h+0.55]}
+       text:"斜面が小球を押し返すとき、その反作用で台は斜め下に押される。台が動かないのは<b>ストッパーと床（＝地球）</b>が支えているから。これは<b>外力</b>なので、<b>水平方向も鉛直方向も</b>運動量は保存されない（水平は $0 \\to -3.46$、鉛直は $0 \\to +2.0$）。",
+       at:(s)=>[Xw-DX14+bs*0.35, h+0.95]},
+      {t0:tHit+DT+0.25,t1:tEnd,bubT1:tHit+DT+0.9,col:COL.U,bub:"エネルギーだけは保存",
+       text:"斜面はなめらかで、はねかえり係数は $e=1$。ストッパーも床も動かないので<b>外力は仕事をしない</b>。だから<b>運動量はどの方向も保存されないのに、力学的エネルギーは保存される</b>。①と②はまったく別の基準で判断することを、この問題で確かめてほしい。",
+       at:(s)=>[Xw-DX14+bs*0.5, h+0.65]}
+    ]
+  };
+}
+
+/* =======================================================================
+   問15 : ひもで結ばれた 2 物体が、重心のまわりを等速円運動する（上から見た図）
+   ======================================================================= */
+function SC15(){
+  const m1=1, m2=3, L=2.00, om=2.0;
+  const r1=L*m2/(m1+m2), r2=L*m1/(m1+m2);
+  const Xc=4.55, Yc=1.95, T=2*Math.PI/om, tEnd=1.25*T;
+  const Tn=m1*r1*om*om;                                  // 張力
+  const R1=0.24, R2=0.34;
+  const st=(t)=>{
+    const f=om*t, c=Math.cos(f), s=Math.sin(f);
+    return {f, x1:Xc+r1*c, y1:Yc+r1*s, x2:Xc-r2*c, y2:Yc-r2*s,
+            v1x:-r1*om*s, v1y:r1*om*c, v2x:r2*om*s, v2y:-r2*om*c};
+  };
+  return {
+    id:"q5", world:{x0:1.95,x1:7.15,y0:-1.30,y1:5.10}, minPxPerM:50, maxH:340, tEnd,
+    totalOffset:false, showVG:true, cmFrame:true,
+    assume:'数値は $m=1.0$ kg、$M=3.0$ kg、ひもの長さ $L=2.0$ m、角速度 $\\omega=2.0$ rad/s として計算。床はなめらかで、図は真上から見たもの。',
+    slowmo:{label:'回りはじめの瞬間', t0:0, t1:0.35, k:0.12},
+    snaps:[{label:"(a) はじめの位置",t:0.004},
+           {label:"1/4 回転したとき",t:T/4},
+           {label:"(b) 半回転したとき",t:T/2}],
+    st,
+    preBubbles(s){ return [{x:Xc,y:4.02,text:"重心のまわりを等速円運動",col:COL.C}]; },
+    draw(P,s,t,o){
+      const c=P.c;
+      c.save(); c.strokeStyle="#eef1f4"; c.lineWidth=1;
+      for(let x=2;x<7.1;x+=1){ c.beginPath(); c.moveTo(P.X(x),P.Y(0.05)); c.lineTo(P.X(x),P.Y(3.85)); c.stroke(); }
+      for(let y=0;y<3.9;y+=1){ c.beginPath(); c.moveTo(P.X(2.0),P.Y(y)); c.lineTo(P.X(7.1),P.Y(y)); c.stroke(); }
+      c.restore();
+      if(o.cm && !o.snap && !o.figure) P.jtextW(2.05,4.92,"■ 重心とともに動く観測者から見た運動（重心の速度は 0 なので見え方は同じ）",{size:10,col:"#7a5aa8",bold:true});
+      else P.jtextW(2.05,4.92,"上から見た図（なめらかな水平面）",{size:11,col:"#aab3bd",cap:1});
+      /* 円軌道（破線） */
+      if(!o.figure){ c.save(); c.strokeStyle="#dfe6ee"; c.setLineDash([4,4]); c.lineWidth=1.2;
+        [r1,r2].forEach(r=>{ c.beginPath(); c.arc(P.X(Xc),P.Y(Yc),P.L(r),0,7); c.stroke(); });
+        c.restore(); }
+      /* ひも */
+      P.line(s.x1,s.y1,s.x2,s.y2,"#8a6a3a",2.2);
+      if(!o.started) P.jtextW((s.x1+s.x2)/2+0.10,(s.y1+s.y2)/2-0.30,"軽いひも",{size:10.5,col:"#8a6a3a"});
+      P.ball(s.x1,s.y1,R1,"#fff",COL.ink,2.2);
+      P.ball(s.x2,s.y2,R2,"#fff",COL.ink,2.2);
+      if(!o.figure) P.ball(Xc,Yc,0.07,"#e02020","#a01010",1.2);
+      if(o.labels){ P.mtextW(s.x1+0.42,s.y1+0.30,"m",{size:15,align:"center",col:COL.A});
+        P.mtextW(s.x2-0.50,s.y2+0.38,"M",{size:15,align:"center",col:COL.B}); }
+      /* 速度（接線方向） */
+      vArrow2(P,s.x1,s.y1,s.v1x,s.v1y,20,"v",COL.A);
+      vArrow2(P,s.x2,s.y2,s.v2x,s.v2y,20,"V",COL.B);
+      /* 張力（内力・向心方向） */
+      if(o.inner!==false){
+        const LT=34, ux1=(Xc-s.x1)/r1, uy1=(Yc-s.y1)/r1, px1=-uy1, py1=ux1;
+        P.arrowPx(s.x1,s.y1, LT*ux1,-LT*uy1,COL.inner,2.8,10);
+        P.arrowPx(s.x2,s.y2,-LT*ux1, LT*uy1,COL.inner,2.8,10);
+        P.mtextW(s.x1+ux1*0.34+px1*0.34, s.y1+uy1*0.34+py1*0.34,"T",{col:COL.inner,size:14,align:"center"});
+        P.mtextW(s.x2-ux1*0.34+px1*0.34, s.y2-uy1*0.34+py1*0.34,"T",{col:COL.inner,size:14,align:"center"});
+        P.jtextW(2.02,-0.40,"ひもの張力（内力）",{size:10.5,col:COL.inner});
+      }
+      if(!o.figure && !o.snap){
+        c.save(); c.strokeStyle="#e6b0b0"; c.setLineDash([3,3]); c.lineWidth=1;
+        c.beginPath(); c.moveTo(P.X(Xc),P.Y(Yc)); c.lineTo(P.X(Xc),P.Y(-0.46)); c.stroke(); c.restore();
+        P.observer(Xc,-0.86,"重心系の観測者","#7a5aa8");
+        P.jtextW(Xc+0.16,-0.24,"重心（動かない）",{size:10.5,col:"#c0392b"});
+      }
+    },
+    readout(s,t){ return [{k:"合計 "+MV("p","x"),v:fmt(m1*s.v1x+m2*s.v2x,2),u:"kg·m/s",wide:1},
+      {k:"合計 "+MV("p","y"),v:fmt(m1*s.v1y+m2*s.v2y,2),u:"kg·m/s",wide:1},
+      {k:"張力 "+MV("T"),v:fmt(Tn,2),u:"N",wide:1},
+      {k:"力学的 "+MV("E")+" の和",v:fmt(.5*m1*(s.v1x*s.v1x+s.v1y*s.v1y)+.5*m2*(s.v2x*s.v2x+s.v2y*s.v2y),2),u:"J",wide:1}];},
+    q(s){ const p1=m1*s.v1x, p2=m2*s.v2x;
+      const K1=.5*m1*(s.v1x*s.v1x+s.v1y*s.v1y), K2=.5*m2*(s.v2x*s.v2x+s.v2y*s.v2y);
+      return {p:{parts:[{label:"m の p_x",col:COL.A,val:p1,mass:m1},{label:"M の p_x",col:COL.B,val:p2,mass:m2}],
+                 total:p1+p2, ylabel:"合計 p_y", ytotal:m1*s.v1y+m2*s.v2y},
+              e:{parts:[{label:"m の K",col:COL.A,val:K1},{label:"M の K",col:COL.B,val:K2}],total:K1+K2}};},
+    events:[
+      {t0:0.05,t1:T/2,col:COL.inner,bub:"内力！\n（ひもの張力）",
+       text:"2 物体を引き合うひもの張力は<b>内力</b>で、大きさは等しく向きは逆。面はなめらかなので水平方向の外力はなく、運動量の総和ははじめの $0$ のまま。だから<b>重心は動かない</b>。",
+       at:(s)=>[Xc, 4.02]},
+      {t0:T/2,t1:tEnd,bubT1:T/2+0.6,col:COL.C,bub:"張力は仕事をしない",
+       text:"張力はつねに<b>速度に垂直</b>（向心方向）なので<b>仕事をしない</b>。摩擦もないので、2 物体の運動エネルギーはそれぞれ一定に保たれ、力学的エネルギーの総和も一定である。",
+       at:(s)=>[Xc, 4.02]}
+    ]
+  };
+}
+
+/* =======================================================================
+   問6 : 互いの万有引力で共通重心のまわりを回る地球と月（重心上の観測者から見る）
+   ======================================================================= */
+function SC16(){
+  const m=1, M=3, L=1.30, om=1.6, V0=0;
+  const r1=L*M/(m+M), r2=L*m/(m+M);
+  const Gp=om*om*L*L*L/(m+M), U0=-Gp*m*M/L;              // 万有引力の位置エネルギー（一定）
+  const T=2*Math.PI/om, tEnd=1.70*T;
+  const X0=4.45, Yc=1.85, R1=0.16, R2=0.30;
+  const st=(t)=>{
+    const f=om*t, c=Math.cos(f), s=Math.sin(f), Xg=X0+V0*t;
+    return {f, Xg, x1:Xg+r1*c, y1:Yc+r1*s, x2:Xg-r2*c, y2:Yc-r2*s,
+            v1x:V0-r1*om*s, v1y:r1*om*c, v2x:V0+r2*om*s, v2y:-r2*om*c};
+  };
+  return {
+    id:"q6", world:{x0:1.85,x1:7.05,y0:-1.55,y1:4.40}, minPxPerM:56, maxH:340, tEnd,
+    figWorld:{x0:3.00,x1:5.90,y0:0.55,y1:3.20}, figH:210,
+    eNoteG:"万有引力による位置エネルギーを含む", pUnit:"運動量 p（相対値）", eUnit:"エネルギー E（相対値）",
+    totalOffset:false, showVG:true, cmFrame:true,
+    assume:'数値は月 $m=1.0$、地球 $M=3.0$（相対値）、中心間の距離 $L=1.3$、角速度 $\\omega=1.6$ として計算。まわりに他の天体はなく、図は<b>共通重心上の観測者</b>から見たものである。',
+    slowmo:{label:'動きはじめ', t0:0, t1:0.35, k:0.12},
+    snaps:[{label:"(a) はじめの位置",t:0.004},
+           {label:"1/4 回転したとき",t:T/4},
+           {label:"(b) 半回転したとき",t:T/2}],
+    st,
+    follow(s){ return s.Xg; },
+    preBubbles(s){ return [{x:s.Xg,y:3.36,text:"まわりに他の天体はない",col:COL.C}]; },
+    draw(P,s,t,o){
+      const c=P.c, DX=o.cm?(s.Xg-X0):0;
+      const x1=s.x1-DX, x2=s.x2-DX, Xg=s.Xg-DX;
+      const v1x=o.cm? s.v1x-V0 : s.v1x, v2x=o.cm? s.v2x-V0 : s.v2x;
+      /* 星（背景） */
+      c.save(); c.fillStyle="#dfe6ee";
+      for(let i=0;i<34;i++){ const sx=1.4+((i*2.713)%6.1), sy=-0.9+((i*1.517)%4.7);
+        const X=P.X(sx-DX*0.35), Y=P.Y(sy); c.beginPath(); c.arc(X,Y,1.5,0,7); c.fill(); }
+      c.restore();
+      P.jtextW(1.90,4.22,"宇宙空間（まわりに他の天体はない）",{size:11,col:"#aab3bd",cap:1});
+      if(!o.figure){ c.save(); c.strokeStyle="#dfe6ee"; c.setLineDash([4,4]); c.lineWidth=1.2;
+        [r1,r2].forEach(r=>{ c.beginPath(); c.arc(P.X(Xg),P.Y(Yc),P.L(r),0,7); c.stroke(); }); c.restore(); }
+      P.ball(x2,s.y2,R2,"#8fb6e0","#2c5f96",2.2);
+      P.ball(x1,s.y1,R1,"#d9d9d9","#8b96a2",2.2);
+      if(!o.figure) P.ball(Xg,Yc,0.06,"#e02020","#a01010",1.2);
+      if(o.labels){ P.mtextW(x1+0.34,s.y1+0.26,"m",{size:15,align:"center",col:COL.A});
+        P.mtextW(x2-0.44,s.y2-0.30,"M",{size:15,align:"center",col:COL.B}); }
+      if(!o.snap){ P.jtextW(x1-0.34,s.y1-0.10,"月",{size:10.5,col:"#5b6672",align:"center"});
+        P.jtextW(x2+0.52,s.y2+0.30,"地球",{size:10.5,col:"#2c5f96",align:"center"}); }
+      vArrow2(P,x1,s.y1,v1x,s.v1y,22,"v",COL.A);
+      vArrow2(P,x2,s.y2,v2x,s.v2y,22,"V",COL.B);
+      if(o.inner!==false){
+        const LT=32, ux=(Xg-x1)/r1, uy=(Yc-s.y1)/r1, pxu=-uy, pyu=ux;
+        P.arrowPx(x1,s.y1, LT*ux,-LT*uy,COL.inner,2.8,10);
+        P.arrowPx(x2,s.y2,-LT*ux, LT*uy,COL.inner,2.8,10);
+        P.mtextW(x1+ux*0.30+pxu*0.30, s.y1+uy*0.30+pyu*0.30,"F",{col:COL.inner,size:14,align:"center"});
+        P.mtextW(x2-ux*0.30+pxu*0.30, s.y2-uy*0.30+pyu*0.30,"F",{col:COL.inner,size:14,align:"center"});
+        P.jtextW(Xg,0.30,"万有引力（内力）",{size:10.5,col:COL.inner,align:"center"});
+      }
+      if(!o.figure && !o.snap){
+        c.save(); c.strokeStyle="#e6b0b0"; c.setLineDash([3,3]); c.lineWidth=1;
+        c.beginPath(); c.moveTo(P.X(Xg),P.Y(Yc-0.42)); c.lineTo(P.X(Xg),P.Y(-0.46)); c.stroke(); c.restore();
+        P.observer(Xg,-0.86,"共通重心上の観測者","#7a5aa8");
+        P.jtextW(Xg+0.16,-0.24,"共通重心（静止して見える）",{size:10.5,col:"#c0392b"});
+        if(o.cm) P.jtextW(1.90,-1.42,"■ 重心とともに動く観測者から見た運動（重心は静止しているので見え方は同じ）",{size:10,col:"#7a5aa8",bold:true});
+      }
+    },
+    readout(s,t){ return [{k:"合計 "+MV("p","x"),v:fmt(m*s.v1x+M*s.v2x,2),u:"",wide:1},
+      {k:"合計 "+MV("p","y"),v:fmt(m*s.v1y+M*s.v2y,2),u:"",wide:1},
+      {k:"力学的 "+MV("E")+" の和",v:fmt(.5*m*(s.v1x*s.v1x+s.v1y*s.v1y)+.5*M*(s.v2x*s.v2x+s.v2y*s.v2y)+U0,2),u:"",wide:1}];},
+    q(s){ const p1=m*s.v1x, p2=M*s.v2x;
+      const K1=.5*m*(s.v1x*s.v1x+s.v1y*s.v1y), K2=.5*M*(s.v2x*s.v2x+s.v2y*s.v2y);
+      return {p:{parts:[{label:"月の p_x",col:COL.A,val:p1,mass:m},{label:"地球の p_x",col:COL.B,val:p2,mass:M}],
+                 total:p1+p2, ylabel:"合計 p_y", ytotal:m*s.v1y+M*s.v2y},
+              e:{parts:[{label:"月の K",col:COL.A,val:K1},{label:"地球の K",col:COL.B,val:K2},
+                        {label:"万有引力の位置エネルギー",col:COL.U,val:U0}],total:K1+K2+U0}};},
+    events:[
+      {t0:0.05,t1:T/2,col:COL.inner,bub:"内力！\n（万有引力）",
+       text:"地球と月が引き合う万有引力は<b>内力</b>（作用・反作用）。まわりに他の天体がないので<b>外力は 0</b>。したがって運動量の総和は変わらず、<b>重心は等速直線運動</b>を続ける。",
+       at:(s)=>[s.Xg, 3.36]},
+      {t0:T/2,t1:tEnd,bubT1:T/2+0.7,col:COL.C,bub:"万有引力は保存力",
+       text:"万有引力は<b>保存力</b>である。円軌道なので中心間の距離は一定に保たれ、位置エネルギーも一定。2 物体の運動エネルギーの和も一定なので、力学的エネルギーの総和は保存される。",
+       at:(s)=>[s.Xg, 3.36]}
+    ]
+  };
+}
+
+/* =======================================================================
+   問17 : 太陽のまわりを公転する「地球と月」の 2 物体系
+   ======================================================================= */
+function SC17(){
+  const m=1, M=3, L=0.85, om=5.2;                        // 地球–月
+  const R=1.70, OM=1.05;                                  // 太陽まわりの公転
+  const r1=L*M/(m+M), r2=L*m/(m+M);
+  const Gp=om*om*L*L*L/(m+M), U0=-Gp*m*M/L;
+  const Sx=4.55, Sy=1.45, Rs=0.40;
+  const Tp=2*Math.PI/OM, tEnd=1.05*Tp;
+  const Usun=-2.4;                                        // 太陽との位置エネルギー（円軌道なので一定）
+  const st=(t)=>{
+    const Ph=OM*t, f=om*t;
+    const Xg=Sx+R*Math.cos(Ph), Yg=Sy+R*Math.sin(Ph);
+    const Vgx=-R*OM*Math.sin(Ph), Vgy=R*OM*Math.cos(Ph);
+    const c=Math.cos(f), s=Math.sin(f);
+    return {Ph, Xg, Yg, Vgx, Vgy,
+            x1:Xg+r1*c, y1:Yg+r1*s, x2:Xg-r2*c, y2:Yg-r2*s,
+            v1x:Vgx-r1*om*s, v1y:Vgy+r1*om*c, v2x:Vgx+r2*om*s, v2y:Vgy-r2*om*c};
+  };
+  return {
+    id:"q7", world:{x0:1.65,x1:7.45,y0:-2.10,y1:4.55}, minPxPerM:46, maxH:352, tEnd,
+    eNoteG:"万有引力による位置エネルギーを含む", pUnit:"運動量 p（相対値）", eUnit:"エネルギー E（相対値）",
+    totalOffset:false, showVG:true, cmFrame:true,
+    assume:'数値は月 $m=1.0$、地球 $M=3.0$（相対値）、公転半径 $R=1.70$、公転の角速度 $\\Omega=1.05$、地球–月の角速度 $\\omega=5.2$ として計算。軌道はどちらも円とする。',
+    slowmo:{label:'動きはじめ', t0:0, t1:0.35, k:0.12},
+    snaps:[{label:"(a) はじめの位置",t:0.004},
+           {label:"1/4 公転したとき",t:Tp/4},
+           {label:"(b) 半分公転したとき",t:Tp/2}],
+    st,
+    preBubbles(s){ return [{x:2.85,y:3.85,text:"太陽が外から引く（外力）",col:COL.B}]; },
+    draw(P,s,t,o){
+      const c=P.c, DXx=o.cm?(s.Xg-Sx):0, DXy=o.cm?(s.Yg-Sy):0;
+      const x1=s.x1-DXx, y1=s.y1-DXy, x2=s.x2-DXx, y2=s.y2-DXy, Xg=s.Xg-DXx, Yg=s.Yg-DXy;
+      c.save(); c.fillStyle="#dfe6ee";
+      for(let i=0;i<30;i++){ const sx=1.8+((i*2.913)%5.5), sy=-1.1+((i*1.717)%5.2);
+        c.beginPath(); c.arc(P.X(sx),P.Y(sy),1.5,0,7); c.fill(); }
+      c.restore();
+      P.jtextW(4.95,4.42,"太陽のまわりを公転する地球と月",{size:11,col:"#aab3bd",cap:1});
+      if(!o.figure){ c.save(); c.strokeStyle="#e6dfc8"; c.setLineDash([5,5]); c.lineWidth=1.3;
+        c.beginPath(); c.arc(P.X(Sx-DXx),P.Y(Sy-DXy),P.L(R),0,7); c.stroke(); c.restore(); }
+      /* 太陽 */
+      P.ball(Sx-DXx,Sy-DXy,Rs,"#ffcf5a","#e0a11a",2.2);
+      if(!o.snap) P.jtextW(Sx-DXx,Sy-DXy-Rs-0.28,"太陽",{size:11,col:"#c2700f",align:"center"});
+      if(!o.figure){ c.save(); c.strokeStyle="#dfe6ee"; c.setLineDash([3,3]); c.lineWidth=1;
+        c.beginPath(); c.arc(P.X(Xg),P.Y(Yg),P.L(r1),0,7); c.stroke(); c.restore(); }
+      P.ball(x2,y2,0.24,"#8fb6e0","#2c5f96",2.0);
+      P.ball(x1,y1,0.13,"#d9d9d9","#8b96a2",2.0);
+      if(!o.figure) P.ball(Xg,Yg,0.06,"#e02020","#a01010",1.2);
+      if(o.labels){ P.mtextW(x1+0.30,y1+0.36,"m",{size:14,align:"center",col:COL.A});
+        P.mtextW(x2-0.44,y2-0.34,"M",{size:14,align:"center",col:COL.B}); }
+      vArrow2(P,Xg,Yg,s.Vgx,s.Vgy,22,"V_G",COL.C);
+      if(o.inner!==false){
+        /* 太陽からの万有引力（外力） */
+        const ux=(Sx-DXx-Xg), uy=(Sy-DXy-Yg), rr=Math.hypot(ux,uy);
+        P.arrowPx(Xg,Yg, 44*ux/rr, -44*uy/rr, COL.B, 3.0, 11);
+        if(o.snap) P.mtextW(Xg+0.52*ux/rr+0.36*uy/rr, Yg+0.52*uy/rr-0.36*ux/rr,"F",{col:COL.B,size:14,align:"center"});
+        else P.jtextW(Xg+0.55*ux/rr-0.80*uy/rr, Yg+0.55*uy/rr+0.80*ux/rr,"万有引力",{col:COL.B,size:11,align:"center"});
+        P.jtextW(1.72,-1.10,"外力：太陽の万有引力",{size:10.5,col:COL.B});
+        P.jtextW(1.72,-1.58,"内力：地球と月の引力",{size:10.5,col:COL.inner});
+        /* 地球と月の間（内力） */
+        const wx=(Xg-x1), wy=(Yg-y1), rw=Math.hypot(wx,wy);
+        P.arrowPx(x1,y1, 26*wx/rw, -26*wy/rw, COL.inner, 2.4, 9);
+        P.arrowPx(x2,y2,-26*wx/rw,  26*wy/rw, COL.inner, 2.4, 9);
+      }
+      if(!o.figure && !o.snap){
+        const bvv=Math.hypot(s.Vgx,s.Vgy)||1, bx=-s.Vgx/bvv, by=-s.Vgy/bvv;
+        const orx=Math.cos(s.Ph), ory=Math.sin(s.Ph);
+        const obX=Xg-0.50*bx-0.72*orx, obY=Yg-0.50*by-0.72*ory;
+        c.save(); c.strokeStyle="#e6b0b0"; c.setLineDash([3,3]); c.lineWidth=1;
+        c.beginPath(); c.moveTo(P.X(Xg),P.Y(Yg)); c.lineTo(P.X(obX),P.Y(obY+0.28)); c.stroke(); c.restore();
+        P.observer(obX,obY,"重心系の観測者","#7a5aa8");
+        if(o.cm) P.jtextW(1.72,-2.02,"■ 重心とともに動く観測者から見た運動（グラフは静止系の値）",{size:10.5,col:"#7a5aa8",bold:true});
+      }
+    },
+    readout(s,t){ return [{k:"合計 "+MV("p","x"),v:fmt(m*s.v1x+M*s.v2x,2),u:"",wide:1},
+      {k:"合計 "+MV("p","y"),v:fmt(m*s.v1y+M*s.v2y,2),u:"",wide:1},
+      {k:"力学的 "+MV("E")+" の和",v:fmt(.5*m*(s.v1x*s.v1x+s.v1y*s.v1y)+.5*M*(s.v2x*s.v2x+s.v2y*s.v2y)+U0+Usun,2),u:"",wide:1}];},
+    q(s){ const p1=m*s.v1x, p2=M*s.v2x;
+      const K1=.5*m*(s.v1x*s.v1x+s.v1y*s.v1y), K2=.5*M*(s.v2x*s.v2x+s.v2y*s.v2y);
+      return {p:{parts:[{label:"月の p_x",col:COL.A,val:p1,mass:m},{label:"地球の p_x",col:COL.B,val:p2,mass:M}],
+                 total:p1+p2, ylabel:"合計 p_y", ytotal:m*s.v1y+M*s.v2y},
+              e:{parts:[{label:"月の K",col:COL.A,val:K1},{label:"地球の K",col:COL.B,val:K2},
+                        {label:"万有引力の位置エネルギー",col:COL.U,val:U0+Usun}],total:K1+K2+U0+Usun}};},
+    events:[
+      {t0:0.05,t1:Tp/2,col:COL.B,bub:"外力！（太陽の万有引力）",
+       text:"地球と月を 2 物体系とみると、<b>太陽からの万有引力は外力</b>である。系の運動量の大きさは変わらないが<b>向きが変わり続ける</b>ので、運動量は保存されない。重心は太陽のまわりを回る。",
+       at:(s)=>[2.85, 3.85]},
+      {t0:Tp/2,t1:tEnd,bubT1:Tp/2+0.9,col:COL.C,bub:"万有引力は保存力",
+       text:"太陽の万有引力も地球–月の万有引力も<b>保存力</b>である。円軌道なので太陽からの距離も中心間の距離も一定で、位置エネルギーは変わらない。よって力学的エネルギーの総和は保存される。",
+       at:(s)=>[2.85, 3.85]}
+    ]
+  };
+}
+
+
+/* =======================================================================
+   問8 : ひもで結ばれた 2 小球（天井に固定 → A をはなす → 最下点で B もはなす）
+   ======================================================================= */
+function SC18(){
+  const m=1, l=0.50, Ox=3.35, Oy=3.35, r=0.105, yRef=1.05;
+  const v0=Math.sqrt(2*G*l), om=v0/l, tHalf=Math.PI/om;
+  /* 第 1 相：B を固定したままの単振り子（ψ＝鉛直下向きからの角、初期 π/2） */
+  const N=900, dtP=0.002;
+  const PS=new Float64Array(N+1), PW=new Float64Array(N+1);
+  (function(){ let p=Math.PI/2, w=0; const f=(q)=>-G/l*Math.sin(q);
+    for(let i=0;i<=N;i++){ PS[i]=p; PW[i]=w;
+      const a1=w,b1=f(p),a2=w+dtP/2*b1,b2=f(p+dtP/2*a1),
+            a3=w+dtP/2*b2,b3=f(p+dtP/2*a2),a4=w+dtP*b3,b4=f(p+dtP*a3);
+      p+=dtP/6*(a1+2*a2+2*a3+a4); w+=dtP/6*(b1+2*b2+2*b3+b4); } })();
+  let iR=1; while(iR<N && PS[iR]>0) iR++;
+  const tRel=iR*dtP, tEnd=tRel+tHalf*1.02;
+  const st=(t)=>{
+    if(t<tRel){ const x=Math.min(N-1e-6,Math.max(0,t/dtP)), i=Math.floor(x), f=x-i;
+      const ps=PS[i]+(PS[i+1]-PS[i])*f, w=PW[i]+(PW[i+1]-PW[i])*f;
+      return {free:false, ps,
+              ax:Ox-l*Math.sin(ps), ay:Oy-l*Math.cos(ps),
+              vax:-l*Math.cos(ps)*w, vay:l*Math.sin(ps)*w,
+              bx:Ox, by:Oy, vbx:0, vby:0}; }
+    const tt=t-tRel, ph=-Math.PI/2+om*tt, c=Math.cos(ph), sg=Math.sin(ph);
+    const Xg=Ox+v0/2*tt, Yg=Oy-l/2-0.5*G*tt*tt, Vgy=-G*tt;
+    return {free:true, tt, Xg, Yg, ph,
+            ax:Xg+l/2*c, ay:Yg+l/2*sg, bx:Xg-l/2*c, by:Yg-l/2*sg,
+            vax:v0/2-l/2*om*sg, vay:Vgy+l/2*om*c,
+            vbx:v0/2+l/2*om*sg, vby:Vgy-l/2*om*c};
+  };
+  const CX=(s)=>(s.ax+s.bx)/2, CY=(s)=>(s.ay+s.by)/2;
+  const CX0=Ox, CY0=Oy-l/2, PINX=3.70, PINY=2.30;
+  return {
+    id:"q8", world:{x0:2.30,x1:5.60,y0:1.00,y1:3.95}, minPxPerM:60, maxH:440, tEnd,
+    figWorld:{x0:2.42,x1:5.30,y0:2.40,y1:3.80}, figH:215,
+    totalOffset:false, showVG:true, cmFrame:true, figT:0.004,
+    eNoteG:"重力による位置エネルギーを含む",
+    assume:'数値は $m=1.0$ kg、$l=0.50$ m として計算（$v_0=\\sqrt{2gl}=3.13$ m/s、共通重心のまわりを半周する時間は $\\pi\\sqrt{l/2g}=0.50$ s）。'+
+           'アニメは「A をはなす瞬間」から始まる。$t=0$（B をはなす瞬間）は、A が最下点に来たときである。',
+    slowmo:{label:'B をはなす瞬間', t0:Math.max(0,tRel-0.10), t1:tRel+0.14, k:0.10},
+    snaps:[{label:"(a) t = 0（B をはなした瞬間）",t:tRel+0.002},
+           {label:"1/4 回転したとき",t:tRel+tHalf/2},
+           {label:"(b) 半周したとき",t:tRel+tHalf}],
+    st,
+    preBubbles(s){ return [{x:Ox-l-0.02,y:Oy-0.66,text:"A を静かにはなす",col:COL.A},
+                           {x:Ox+0.62,y:Oy-0.44,text:"B は固定したまま",col:COL.B}]; },
+    draw(P,s,t,o){
+      const c=P.c;
+      const useCM=(o.cm && s.free);
+      const DX=useCM?(CX(s)-PINX):0, DY=useCM?(CY(s)-PINY):0;
+      const VGx=useCM?v0/2:0, VGy=useCM?-G*s.tt:0;
+      const ax=s.ax-DX, ay=s.ay-DY, bx=s.bx-DX, by=s.by-DY, oy=Oy-DY, ox=Ox-DX;
+      /* 天井 */
+      P.rectW(2.35-DX,oy,3.20,0.18,"#e9edf1","#333",2,2);
+      c.save(); c.strokeStyle="#8b96a2"; c.lineWidth=1;
+      for(let x=2.40;x<5.55;x+=0.22){ c.beginPath(); c.moveTo(P.X(x-DX),P.Y(oy)); c.lineTo(P.X(x-0.12-DX),P.Y(oy+0.18)); c.stroke(); }
+      c.restore();
+      if(!o.figure && !o.snap && !o.cm) P.jtextW(2.34,3.82,"水平な天井",{size:10.5,col:"#aab3bd",cap:1});
+      /* はじめの位置・振れる道すじ */
+      if(o.figure || (!o.snap && !o.started)){
+        const pg=Math.PI/2-0.96;                       // 図の中の小球の位置（振れ角 55°）
+        c.save(); c.strokeStyle="#b9c9dd"; c.setLineDash([5,4]); c.lineWidth=1.4;
+        c.beginPath(); c.arc(P.X(ox),P.Y(oy),P.L(l),Math.PI,Math.PI/2,true); c.stroke(); c.restore();
+        const gx=ox-l*Math.sin(pg), gy=oy-l*Math.cos(pg);
+        P.line(ox,oy,gx,gy,"#b9a184",1.8);
+        P.ball(gx,gy,r,"#f2f5f8","#a9b6c4",1.8);
+        /* 振れる向きの矢印（円弧の接線） */
+        {const aa=Math.PI-0.52;
+         const px0=ox+l*Math.cos(aa), py0=oy-l*Math.sin(aa);
+         const tx=Math.sin(aa), ty=-Math.cos(aa);
+         P._skipTick=true; P.arrowPx(px0,py0, 26*tx, 26*ty, "#5b6672",2.2,10); P._skipTick=false;}
+        /* θ の弧 */
+        c.save(); c.strokeStyle="#5b6672"; c.lineWidth=1.4;
+        c.beginPath(); c.arc(P.X(ox),P.Y(oy),P.L(0.30),Math.PI,Math.PI/2+pg,true); c.stroke(); c.restore();
+        const am=(Math.PI+Math.PI/2+pg)/2;
+        P.mtextW(ox+0.44*Math.cos(am),oy-0.44*Math.sin(am),"θ",{size:16,col:"#5b6672",align:"center"});
+        /* 重力の向き */
+        P._skipTick=true;
+        P.arrowPx(5.05,oy-0.34,0,30,"#333",2.2,10); P._skipTick=false;
+        P.mtextW(4.88,oy-0.50,"g",{size:15,col:"#333",align:"center"});
+      }
+      /* 重心の放物線 */
+      if(s.free && !o.figure && !useCM){
+        c.save(); c.strokeStyle="#e6b0b0"; c.setLineDash([3,3]); c.lineWidth=1.1; c.beginPath();
+        for(let i=0;i<=60;i++){ const tt=s.tt*i/60;
+          const X=P.X(Ox+v0/2*tt-DX), Y=P.Y(Oy-l/2-0.5*G*tt*tt-DY);
+          i?c.lineTo(X,Y):c.moveTo(X,Y); }
+        c.stroke(); c.restore();
+      }
+      if(s.free && !o.figure){
+        c.save(); c.strokeStyle="#dfe6ee"; c.setLineDash([4,4]); c.lineWidth=1.1;
+        c.beginPath(); c.arc(P.X(s.Xg-DX),P.Y(s.Yg-DY),P.L(l/2),0,7); c.stroke(); c.restore();
+      }
+      /* ひも */
+      P.line(ax,ay,bx,by,"#8a6a3a",2.0);
+      if(!o.started && !o.snap) P.mtextW((ax+bx)/2,(ay+by)/2+0.15,"l",{size:15,align:"center",col:"#8a6a3a"});
+      /* 小球 */
+      const dx=bx-ax, dy=by-ay, dd=Math.hypot(dx,dy)||1, ux=dx/dd, uy=dy/dd, qx=-uy, qy=ux;
+      P.ball(ax,ay,r,"#fff",COL.ink,2.4);
+      P.ball(bx,by,r,"#eef3f9",COL.ink,2.4);
+      if(o.figure){
+        P.jtextW(ax-0.30,ay-0.02,"A",{size:12,col:COL.A,align:"center",bold:true});
+        P.jtextW(bx+0.30,by-0.02,"B",{size:12,col:COL.B,align:"center",bold:true});
+        P.mtextW(ax,ay-r-0.24,"m",{size:15,align:"center",col:COL.A});
+        P.mtextW(bx,by-r-0.24,"m",{size:15,align:"center",col:COL.B});
+        P.mtextW(bx+0.06,by+0.26,"O",{size:15,align:"center",col:"#5b6672"});
+      }else{
+        P.jtextW(ax-0.48*ux,ay-0.48*uy,"A",{size:11.5,col:COL.A,align:"center",bold:true});
+        P.jtextW(bx+0.48*ux,by+0.48*uy,"B",{size:11.5,col:COL.B,align:"center",bold:true});
+        if(o.labels){ P.mtextW(ax-0.48*ux+0.34*qx,ay-0.48*uy+0.34*qy,"m",{size:14,align:"center",col:COL.A});
+          P.mtextW(bx+0.48*ux+0.34*qx,by+0.48*uy+0.34*qy,"m",{size:14,align:"center",col:COL.B}); }
+        if(!s.free) P.mtextW(bx+0.32,by+0.26,"O",{size:14,align:"center",col:"#5b6672"});
+      }
+      /* 速度 */
+      vArrow2(P,ax,ay,s.vax-VGx,s.vay-VGy,17,"v",COL.A);
+      vArrow2(P,bx,by,s.vbx-VGx,s.vby-VGy,17,"V",COL.B);
+      /* 力 */
+      if(o.inner!==false){
+        P.arrowPx(ax+r*ux,ay+r*uy, 22*ux,-22*uy,COL.inner,2.6,10);
+        P.arrowPx(bx-r*ux,by-r*uy,-22*ux, 22*uy,COL.inner,2.6,10);
+        P.mtextW(ax+0.20*ux+0.32*qx, ay+0.20*uy+0.32*qy,"T",{col:COL.inner,size:13,align:"center"});
+        P.mtextW(bx-0.20*ux+0.32*qx, by-0.20*uy+0.32*qy,"T",{col:COL.inner,size:13,align:"center"});
+        if(!s.free){
+          P.arrowPx(bx,by+r,0,-22,"#c0392b",2.6,10);
+          P.jtextW(2.34,1.72,"内力：ひもの張力",{size:10.5,col:COL.inner});
+          P.jtextW(2.34,1.42,"外力：天井が B を支える力・重力",{size:10.5,col:"#c0392b"});
+        }else{
+          P.arrowPx(ax,ay,0,26,"#c0392b",2.4,9);
+          P.arrowPx(bx,by,0,26,"#c0392b",2.4,9);
+          if(!o.snap){ P.mtextW(ax+0.30,ay-0.20,"mg",{col:"#c0392b",size:13,align:"center"});
+            P.mtextW(bx+0.30,by-0.20,"mg",{col:"#c0392b",size:13,align:"center"}); }
+          P.jtextW(2.34,1.72,"内力：ひもの張力",{size:10.5,col:COL.inner});
+          P.jtextW(2.34,1.42,"外力：重力だけ（鉛直向き）",{size:10.5,col:"#c0392b"});
+        }
+      }
+      if(o.cm && !o.figure && !o.snap)
+        P.jtextW(2.34,1.10,"■ 重心とともに動く観測者から見た運動（t = 0 以降。グラフは地面から見た値）",{size:10.5,col:"#7a5aa8",bold:true});
+      /* 重心と観測者 */
+      if(!o.figure && !o.snap){
+        const cx=CX(s)-DX, cy=CY(s)-DY;
+        P.ball(cx,cy,0.045,"#e02020","#a01010",1.2);
+        c.save(); c.strokeStyle="#e6b0b0"; c.setLineDash([3,3]); c.lineWidth=1;
+        c.beginPath(); c.moveTo(P.X(cx),P.Y(cy)); c.lineTo(P.X(cx+0.78),P.Y(cy-0.20)); c.stroke(); c.restore();
+        P.observer(cx+0.95,cy-0.34,"重心系の観測者","#7a5aa8");
+      }
+    },
+    readout(s,t){
+      const px=m*(s.vax+s.vbx), py=m*(s.vay+s.vby);
+      const K=.5*m*(s.vax*s.vax+s.vay*s.vay)+.5*m*(s.vbx*s.vbx+s.vby*s.vby);
+      const U=m*G*(s.ay-yRef)+m*G*(s.by-yRef);
+      return [{k:"合計 "+MV("p","x"),v:fmt(px,2),u:"kg·m/s",wide:1},
+              {k:"合計 "+MV("p","y"),v:fmt(py,2),u:"kg·m/s",wide:1},
+              {k:"力学的 "+MV("E")+" の和",v:fmt(K+U,2),u:"J",wide:1}];},
+    q(s){
+      const p1=m*s.vax, p2=m*s.vbx, y1=m*s.vay, y2=m*s.vby;
+      const K1=.5*m*(s.vax*s.vax+s.vay*s.vay), K2=.5*m*(s.vbx*s.vbx+s.vby*s.vby);
+      const U=m*G*(s.ay-yRef)+m*G*(s.by-yRef);
+      return {p:{parts:[{label:"A の p_x",col:COL.A,val:p1,mass:m},{label:"B の p_x",col:COL.B,val:p2,mass:m}],
+                 total:p1+p2, ylabel:"合計 p_y", ytotal:y1+y2},
+              e:{parts:[{label:"A の K",col:COL.A,val:K1},{label:"B の K",col:COL.B,val:K2},
+                        {label:"重力による位置エネルギー",col:COL.U,val:U}],total:K1+K2+U}};},
+    events:[
+      {t0:0.02,t1:tRel,col:COL.B,bub:"B は天井に固定",
+       text:"この区間では B が天井に固定されているので、<b>天井からの力（外力）</b>がはたらいている。だから水平方向の運動量も保存されず、$0$ から $mv_0$ へと増えていく。問われているのは <b>$t=0$ 以降</b>であることに注意しよう。",
+       at:(s)=>[4.95, 2.15]},
+      {t0:tRel,t1:tRel+tHalf*0.45,col:COL.inner,bub:"B をはなした！外力は重力だけ",
+       text:"天井からの力がなくなり、外力は<b>重力（鉛直向き）</b>だけになった。ひもの張力は<b>内力</b>である。したがって<b>水平方向の運動量だけ</b>が保存される（$mv_0$ のまま）。鉛直方向は重力の力積でどんどん増えていく。",
+       at:(s)=>[4.95, 2.15]},
+      {t0:tRel+tHalf*0.45,t1:tEnd,bubT1:tRel+tHalf*0.95,col:COL.C,bub:"重心は放物運動",
+       text:"重心は<b>水平方向は等速・鉛直方向は自由落下</b>、つまり放物運動をする。2 球はその重心のまわりを<b>等速円運動</b>する。ひもの張力は速度に垂直で仕事をしないので、力学的エネルギーの総和は最初から最後まで<b>一定</b>である。",
+       at:(s)=>[4.95, 2.15]}
+    ]
+  };
+}
+
+/* =======================================================================
+   問19 : 静止した原子核の α 崩壊
+   ======================================================================= */
+function SC19(){
+  const m1=1, m2=5;                       // α 粒子 : 娘核（相対値）
+  const v1=3.0, v2=-m1*v1/m2;
+  const Xc=4.50, Yc=1.70, t0=0.18, tEnd=2.05;
+  const d=0.12, R0=0.46, R1=0.16, R2=0.40;
+  const Enuc=0.5*m1*v1*v1+0.5*m2*v2*v2;
+  const st=(t)=>{
+    if(t<t0) return {sp:false, x1:Xc, x2:Xc, v1:0, v2:0};
+    const τ=t-t0;
+    return {sp:true, x1:Xc+m2*d+v1*τ, x2:Xc-m1*d+v2*τ, v1, v2, near:τ<0.16};
+  };
+  return {
+    id:"q9", world:{x0:1.60,x1:7.40,y0:-1.45,y1:3.95}, minPxPerM:54, maxH:320, tEnd,
+    totalOffset:false, showVG:true, cmFrame:true,
+    eNoteG:"質量欠損のエネルギーは含めない", pUnit:"運動量 p（相対値）", eUnit:"エネルギー E（相対値）",
+    assume:'数値は α 粒子 $m=1.0$、娘核 $M=5.0$（相対値）、α 粒子の速さ $3.0$ として計算。まわりに他の物体はなく、重力の影響は無視できる。',
+    slowmo:{label:'崩壊の瞬間', t0:Math.max(0,t0-0.06), t1:t0+0.18, k:0.10},
+    snaps:[{label:"(a) 崩壊前（静止）",t:t0-0.05},
+           {label:"崩壊の瞬間（内力）",t:t0+0.004},
+           {label:"(b) 崩壊後",t:t0+0.30}],
+    st,
+    preBubbles(s){ return [{x:Xc,y:Yc+R0+0.62,text:"静止した原子核",col:COL.B}]; },
+    draw(P,s,t,o){
+      const c=P.c;
+      if(o.cm && !o.snap && !o.figure) P.jtextW(1.66,3.78,"■ 重心とともに動く観測者から見た運動（重心の速度は 0 なので見え方は同じ）",{size:10,col:"#7a5aa8",bold:true});
+      else P.jtextW(1.66,3.78,"まわりに他の物体はない（重力は無視）",{size:11,col:"#aab3bd",cap:1});
+      if(!s.sp){
+        P.ball(Xc,Yc,R0,"#dfe9f6","#2c5f96",2.4);
+        P.jtextW(Xc,Yc-R0-0.30,"原子核",{size:11.5,col:"#2c5f96",align:"center"});
+        if(o.labels) P.mtextW(Xc,Yc+R0+0.34,"M",{size:15,align:"center",col:COL.B});
+        P.jtextW(1.66,-0.14,"崩壊で質量がわずかに減る（質量欠損）",{size:10.5,col:"#c2700f"});
+      }else{
+        P.ball(s.x2,Yc,R2,"#dfe9f6","#2c5f96",2.4);
+        P.ball(s.x1,Yc,R1,"#ffd98a","#c2700f",2.2);
+        P.jtextW(s.x2,Yc-R2-0.30,"娘核",{size:11.5,col:"#2c5f96",align:"center"});
+        P.jtextW(s.x1,Yc-R1-0.34,"α 粒子",{size:10.5,col:"#c2700f",align:"center"});
+        if(o.labels){ P.mtextW(s.x1,Yc+R1+0.36,"m",{size:14,align:"center",col:COL.A});
+          P.mtextW(s.x2,Yc+R2+0.34,"M-m",{size:14,align:"center",col:COL.B}); }
+        vArrow2(P,s.x1+R1,Yc,s.v1,0,24,"v",COL.A);
+        vArrow2(P,s.x2-R2,Yc,s.v2,0,24,"V",COL.B);
+        if(o.inner!==false && s.near){
+          P.arrowPx(s.x1,Yc+0.62, 40,0,COL.inner,2.8,10);
+          P.arrowPx(s.x2,Yc+0.62,-40,0,COL.inner,2.8,10);
+          P.mtextW(s.x1+0.42,Yc+0.86,"F",{col:COL.inner,size:14,align:"center"});
+          P.mtextW(s.x2-0.42,Yc+0.86,"F",{col:COL.inner,size:14,align:"center"});
+        }
+      }
+      if(o.inner!==false) P.jtextW(1.66,-0.62,"内力だけ（外力はない）",{size:10.5,col:COL.inner});
+      if(!o.figure && !o.snap){
+        c.save(); c.strokeStyle="#e6b0b0"; c.setLineDash([3,3]); c.lineWidth=1;
+        c.beginPath(); c.moveTo(P.X(Xc),P.Y(Yc-R2-0.10)); c.lineTo(P.X(Xc),P.Y(-0.62)); c.stroke(); c.restore();
+        P.observer(Xc,-1.00,"重心系の観測者","#7a5aa8");
+        P.jtextW(Xc+0.16,-0.44,"重心（動かない）",{size:10.5,col:"#c0392b"});
+      }
+    },
+    readout(s,t){ return [{k:"合計 "+MV("p"),v:fmt(m1*s.v1+m2*s.v2,2),u:"",wide:1},
+      {k:"運動エネルギーの和",v:fmt(.5*m1*s.v1*s.v1+.5*m2*s.v2*s.v2,2),u:"",wide:1},
+      {k:"質量欠損のエネルギー",v:fmt(Enuc-(.5*m1*s.v1*s.v1+.5*m2*s.v2*s.v2),2),u:"",wide:1}];},
+    q(s){ const p1=m1*s.v1, p2=m2*s.v2, K1=.5*m1*s.v1*s.v1, K2=.5*m2*s.v2*s.v2;
+      return {p:{parts:[{label:"α 粒子",col:COL.A,val:p1,mass:m1},{label:"娘核",col:COL.B,val:p2,mass:m2}],total:p1+p2},
+              e:{parts:[{label:"α 粒子の K",col:COL.A,val:K1},{label:"娘核の K",col:COL.B,val:K2},
+                        {label:"質量欠損のエネルギー（力学的エネルギーではない）",col:COL.lost,dash:[5,4],val:Enuc-K1-K2}],
+                 total:K1+K2}};},
+    events:[
+      {t0:t0-0.05,t1:t0+0.55,col:COL.inner,bub:"内力！（外力はない）",
+       text:"核が 2 つに分かれるときに押し合う力は<b>内力</b>で、外力はまったくない。だから運動量の総和ははじめの $0$ のまま。$mv+(M-m)V=0$ より、<b>α 粒子と娘核は必ず逆向き</b>に飛び、速さの比は質量の逆比になる。",
+       at:(s)=>[Xc, Yc+R0+0.62]},
+      {t0:t0+0.55,t1:tEnd,bubT1:t0+1.2,col:COL.B,bub:"運動エネルギーが増えた",
+       text:"崩壊前の運動エネルギーは $0$ だったのに、崩壊後は $0$ ではない。増えたぶんは、もとの原子核が $\\alpha$ 粒子と娘核に変わるときの<b>質量欠損</b>によるエネルギー（$E=\\Delta m c^2$）から来たもので、力学的エネルギーだけを見ると<b>保存していない</b>。",
+       at:(s)=>[Xc, Yc+R0+0.62]}
+    ]
+  };
+}
+
+/* =======================================================================
+   問20 : コンプトン効果（波長 λ の X 線と静止した電子）
+   ======================================================================= */
+function SC20(){
+  const me=4, p1=3.0, th=60*Math.PI/180, cs=Math.cos(th), sn=Math.sin(th);
+  const bq=2*me-2*p1*cs, cq=p1*p1-2*me*p1;
+  const p2=(-bq+Math.sqrt(bq*bq-4*cq))/2;              // 散乱 X 線の運動量 h/λ'
+  const pex=p1-p2*cs, pey=-p2*sn, pe=Math.hypot(pex,pey);
+  const phi=Math.atan2(-pey,pex);                      // 電子が飛ぶ角（x 軸の下側）
+  const vex=pex/me, vey=pey/me;
+  const E1=p1, E2=p2, Ke=(pex*pex+pey*pey)/(2*me);     // c=1 の単位系
+  const SP=2.0;                                        // 表示上の速さ倍率（比は正しい）
+  const Xc=4.05, Yc=1.72, t0=0.60, tEnd=t0+0.95;
+  const vG=p1/me;
+  const st=(t)=>{
+    if(t<t0){ const d=t0-t;
+      return {sp:false, px:Xc-SP*1.0*d, py:Yc, ex:Xc, ey:Yc}; }
+    const q=t-t0;
+    return {sp:true, px:Xc+SP*cs*q, py:Yc+SP*sn*q,
+            ex:Xc+SP*vex*q, ey:Yc+SP*vey*q, near:q<0.22};
+  };
+  /* 波（進行方向 (ux,uy) の後方へ n 波長ぶん描く） */
+  const wave=(P,xh,yh,ux,uy,lam,col,n,maxLen)=>{
+    const c=P.c, qx=-uy, qy=ux;
+    c.save(); c.strokeStyle=col; c.lineWidth=2.4; c.lineCap="round"; c.beginPath();
+    const Ln=Math.min(lam*(n||3.2), (maxLen===undefined? 1e9 : Math.max(0,maxLen))), N=110;
+    for(let i=0;i<=N;i++){ const d=Ln*i/N, aa=Math.sin(2*Math.PI*d/lam)*0.115;
+      const X=P.X(xh-ux*d+qx*aa), Y=P.Y(yh-uy*d+qy*aa);
+      i?c.lineTo(X,Y):c.moveTo(X,Y); }
+    c.stroke(); c.restore();
+    P.arrowPx(xh-ux*0.14,yh-uy*0.14, ux*18, -uy*18, col, 2.6, 11);
+  };
+  /* 角の弧 */
+  const arcW=(P,x,y,R,a0,a1,col,lab)=>{
+    const c=P.c; c.save(); c.strokeStyle=col; c.lineWidth=1.3;
+    c.beginPath(); c.arc(P.X(x),P.Y(y),P.L(R),-a1,-a0); c.stroke(); c.restore();
+    const am=(a0+a1)/2;
+    P.mtextW(x+(R+0.26)*Math.cos(am), y+(R+0.26)*Math.sin(am), lab, {size:15,align:"center",col:col});
+  };
+  return {
+    id:"q10", world:{x0:1.55,x1:7.05,y0:-1.35,y1:4.05}, minPxPerM:54, maxH:330, tEnd,
+    totalOffset:false, showVG:true, cmFrame:true,
+    eNoteG:"X 線のエネルギーを含む", pUnit:"運動量 p（相対値）", eUnit:"エネルギー E（相対値）",
+    assume:'数値は電子の質量 $m=4.0$、入射 X 線の運動量 $h/\\lambda=3.0$、散乱角 $\\theta=60^\\circ$（光速 $c=1$ とする相対値）として計算。'+
+           '$hc/\\lambda$ をエネルギー、$h/\\lambda$ を運動量、電子の運動エネルギーを $\\tfrac12 mv^2$ とした。結果は $h/\\lambda\\prime=2.11$、$mv=2.67$、$\\varphi=43^\\circ$。',
+    slowmo:{label:'衝突の瞬間', t0:t0-0.10, t1:t0+0.14, k:0.08},
+    snaps:[{label:"(a) 衝突前",t:t0-0.30},
+           {label:"衝突の瞬間（内力だけ）",t:t0+0.14},
+           {label:"(b) 衝突後",t:t0+0.62}],
+    st,
+    preBubbles(s){ return [{x:2.75,y:Yc+1.42,text:"静止した電子に X 線が当たる",col:COL.B}]; },
+    draw(P,s,t,o){
+      const c=P.c, DX=o.cm?(SP*vG*(Math.max(0,Math.min(t,tEnd))-t0)):0;
+      const OX=Xc-DX;
+      /* 座標軸 */
+      c.save(); c.strokeStyle="#8b96a2"; c.lineWidth=1.4;
+      c.beginPath(); c.moveTo(P.X(1.70),P.Y(Yc)); c.lineTo(P.X(6.75),P.Y(Yc)); c.stroke();
+      c.beginPath(); c.moveTo(P.X(OX),P.Y(Yc-1.15)); c.lineTo(P.X(OX),P.Y(Yc+1.95)); c.stroke();
+      c.restore();
+      P._skipTick=true;
+      P.arrowPx(6.75,Yc,10,0,"#8b96a2",1.4,8);
+      P.arrowPx(OX,Yc+1.95,0,-10,"#8b96a2",1.4,8);
+      P._skipTick=false;
+      P.mtextW(6.86,Yc-0.16,"x",{size:14,col:"#5b6672",align:"center"});
+      P.mtextW(OX-0.26,Yc+1.90,"y",{size:14,col:"#5b6672",align:"center"});
+      if(!o.figure && !o.snap)
+        P.jtextW(1.60,-0.18,o.cm?"■ 全運動量が 0 に見える観測者から見た運動（グラフは静止系の値）":"まわりに他の物体はない（外力なし）",
+                 {size:10.5,col:o.cm?"#7a5aa8":"#aab3bd",bold:!!o.cm,cap:!o.cm});
+      if(!s.sp){
+        wave(P,s.px-DX,s.py,1,0,0.40,"#e07b18",2.8);
+        P.jtextW(1.62,Yc+1.05,"入射 X 線（波長 λ）",{size:11,col:"#c2700f"});
+        P.tagW(2.55,Yc+0.52,"運動量 h/λ","#c2700f",11);
+        P.ball(OX,Yc,0.15,"#dbe7f6",COL.A,2.2);
+        P.jtextW(OX+0.06,Yc-0.36,"電子（静止）",{size:11,col:COL.A});
+        if(o.labels) P.mtextW(OX-0.30,Yc+0.30,"m",{size:14,align:"center",col:COL.A});
+      }else{
+        /* 散乱 X 線 */
+        wave(P,s.px-DX,s.py,cs,sn,0.40*p1/p2,"#e07b18",3.0,Math.hypot(s.px-Xc,s.py-Yc));
+        P.jtextW(OX+0.34,Yc+1.90,o.snap?"散乱 X 線":"散乱 X 線（波長 λ′）",{size:11,col:"#c2700f"});
+        P.tagW(OX+1.78,Yc+1.50,"運動量 h/λ′","#c2700f",11);
+        /* 電子 */
+        c.save(); c.strokeStyle="#b9c9dd"; c.setLineDash([4,4]); c.lineWidth=1;
+        c.beginPath(); c.moveTo(P.X(OX),P.Y(Yc));
+        c.lineTo(P.X(OX+2.30*Math.cos(-phi)),P.Y(Yc+2.30*Math.sin(-phi))); c.stroke(); c.restore();
+        P.ball(s.ex-DX,s.ey,0.15,"#dbe7f6",COL.A,2.2);
+        vArrow2(P,s.ex-DX,s.ey,vex,vey,70,"v",COL.A);
+        P.jtextW(OX+0.10,Yc-1.02,o.snap?"電子":"はね飛ばされた電子",{size:11,col:COL.A});
+        P.tagW(OX+1.95,Yc-0.38,"運動量 mv",COL.A,11);
+        /* 角 */
+        arcW(P,OX,Yc,0.60,0,th,"#5b6672","θ");
+        arcW(P,OX,Yc,0.86,-phi,0,"#5b6672","φ");
+        if(o.inner!==false && s.near){
+          const bxp=OX-1.35, byp=Yc+0.80, ju=pex/pe, jv=pey/pe;
+          P.arrowPx(bxp,byp, 30*ju,-30*jv,COL.inner,2.8,10);
+          P.arrowPx(bxp,byp,-30*ju, 30*jv,COL.inner,2.8,10);
+        }
+      }
+      if(o.inner!==false) P.jtextW(1.60,0.40,"内力だけ（外力はない）",{size:10.5,col:COL.inner});
+      if(!o.figure && !o.snap){
+        const xo=Xc-1.05-DX+SP*vG*Math.max(0,Math.min(t,tEnd));
+        P.observer(xo,-0.95,"全運動量が 0 に見える観測者","#7a5aa8");
+      }
+    },
+    readout(s,t){ const P1=s.sp?p2*cs:p1, P2=s.sp?pex:0, Y1=s.sp?p2*sn:0, Y2=s.sp?pey:0;
+      return [{k:"合計 "+MV("p","x"),v:fmt(P1+P2,2),u:"",wide:1},
+              {k:"合計 "+MV("p","y"),v:fmt(Y1+Y2,2),u:"",wide:1},
+              {k:"エネルギーの和",v:fmt(s.sp?E2+Ke:E1,2),u:"",wide:1}];},
+    q(s){ const P1=s.sp?p2*cs:p1, P2=s.sp?pex:0, Y1=s.sp?p2*sn:0, Y2=s.sp?pey:0;
+      const K1=s.sp?E2:E1, K2=s.sp?Ke:0;
+      return {p:{parts:[{label:"X 線の p_x",col:COL.U,val:P1,mass:0},{label:"電子の p_x",col:COL.A,val:P2,mass:me}],
+                 total:P1+P2, ylabel:"合計 p_y", ytotal:Y1+Y2},
+              e:{parts:[{label:"X 線のエネルギー",col:COL.U,val:K1},{label:"電子の K",col:COL.A,val:K2}],total:K1+K2}};},
+    events:[
+      {t0:t0-0.05,t1:t0+0.40,col:COL.inner,bub:"内力だけ！",
+       text:"X 線（光子）と電子がおよぼし合う力は<b>内力</b>だけで、外からはたらく力はない。したがって<b>運動量はベクトルとして保存</b>される。$x$ 成分・$y$ 成分をそれぞれ式にすると、図の ⓑ ⓒ の 2 式になる。",
+       at:(s)=>[2.55, 2.85]},
+      {t0:t0+0.40,t1:tEnd,bubT1:t0+0.85,col:COL.C,bub:"エネルギーも保存",
+       text:"X 線のエネルギー $hc/\\lambda$ と電子の運動エネルギーの和も保存される（図の ⓐ 式）。X 線はエネルギーの一部を電子にわたすので、散乱 X 線は<b>波長がのびる</b>（$\\lambda\\prime \\gt \\lambda$）。これがコンプトン効果である。",
+       at:(s)=>[2.55, 2.85]}
     ]
   };
 }
 
 /* =========================================================================
-   難関大受験編 Part 4 : 問題データ（問11〜）とページ組み立て
+   難関大受験編 Part 4 : 問題データ（問1〜10）とページ組み立て
    ========================================================================= */
 
 const OPT = {
@@ -1597,11 +2260,11 @@ function buildPage(){
   h+=`<div class="card purpose">
     <p class="lead">【目的】</p>
     <p>このページは、<b>共通テストで満点をねらう人・二次試験で難関大を受験するつもりの人</b>のための応用編である。
-    基礎編（問 1 〜 10）で身につけた「内力か外力か」「保存力か非保存力か」の判断を、
+    <b>基礎編のページ</b>で身につけた「内力か外力か」「保存力か非保存力か」の判断を、
     <b>台車の中の振動・壁とつながれたばね・斜めの衝突・円運動・天体・原子核</b>といった、
     ひとひねりある場面に広げていく。</p>
-    <p>難関大の問題では、<b>どこまでを「系」とみなすか</b>で答えが変わる。
-    2 つの保存則が「成り立つ／成り立たない」を、力の図をかいて自分で言い切れるようになることが目標である。</p>
+    <p>難関大の問題では、<b>どこまでを「系」とみなすか</b>が重要である。
+    2 つの保存則がそれぞれ成り立つかどうかを、力の図をかいて自分で判断できるようになることが目的である。</p>
   </div>`;
 
   h+=`<div id="venn" class="card">
@@ -1620,9 +2283,9 @@ function buildPage(){
   </div>
   <p class="howto">問題ごとに ① ② の両方を選ぶと、右側にアニメーションと解説が現れます。</p>`;
 
-  const SHORT={11:"台車の中で振動する小球",12:"壁につないだばねと弾性衝突",13:"自由に動ける斜め台への衝突",
-    14:"固定された斜め台への衝突",15:"ひもで結ばれた 2 物体の等速円運動",16:"並進する地球と月",
-    17:"太陽をまわる地球と月",18:"天井からつるした 2 小球",19:"α 崩壊",20:"コンプトン効果"};
+  const SHORT={1:"ばね付き台車の上の小球　（出題元：京大 2014）",2:"ばねにつながった物体との弾性衝突",3:"自由に動ける斜め台への衝突",
+    4:"固定された斜め台への衝突",5:"ひもで結ばれた 2 物体の等速円運動",6:"共通重心の周りをまわる地球と月",
+    7:"太陽の周りをまわる地球と月",8:"ひもで結ばれた 2 小球をはなす　（出題元：東大 2015）",9:"原子核崩壊（α 崩壊）",10:"コンプトン効果（X 線と電子）"};
   window.SHORT=SHORT;
   h+=`<div class="tocbox">
     <div class="toclabel">■ 目次</div>
@@ -1638,7 +2301,7 @@ function buildPage(){
         <div class="figbox"><canvas id="fig${p.n}"></canvas></div>
         <div class="abline">${p.ab||""}</div>
         <table class="ans">
-          <tr><th>① 2 物体の運動量の総和は保存</th><th>② 2 物体の力学的エネルギーの総和${p.eNote?'<span style="font-weight:400;font-size:.9em">（ばねの弾性エネルギーを含む）</span>':""}は保存</th></tr>
+          <tr><th>① 2 物体の運動量の総和は保存</th><th>② 2 物体の力学的エネルギーの総和${p.eNote?'<span style="font-weight:400;font-size:.9em">（'+(p.eNote===true?'ばねの弾性エネルギーを含む':p.eNote)+'）</span>':""}は保存</th></tr>
           <tr>
             <td>${p.opts.p.map(k=>`<button class="opt" data-q="${p.n}" data-c="p" data-k="${k}">${OPT[k]}</button>`).join("")}</td>
             <td>${p.opts.e.map(k=>`<button class="opt" data-q="${p.n}" data-c="e" data-k="${k}">${OPT[k]}</button>`).join("")}</td>
@@ -1761,11 +2424,8 @@ function buildPage(){
     if(sum===full){ msg.innerHTML='🎉 <b>素晴らしい！</b>ここまで正確に判断できれば<b>共通テストは高得点</b>。二次試験で難関大に挑む力学の土台は完成です。この調子で頑張ろう！'; msg.className="scoremsg gold"; }
     else if(ratio>=0.8){ msg.innerHTML='🌸 <b>合格ライン！</b>あと少しで満点。まちがえた問題は「はたらく力を一つずつ書き出す」ところからやり直そう。'; msg.className="scoremsg pass"; }
     else if(ratio>=0.55){ msg.innerHTML='💪 <b>惜しい！ファイト！</b>難関大の問題は「どこまでを系とみるか」で決まります。解説の力の図をじっくり見てみよう。'; msg.className="scoremsg near"; }
-    else { msg.innerHTML='📘 まずは<b>基礎編（問 1 〜 10）</b>にもどって、内力と外力・保存力と非保存力の区別を固めよう。そのうえでもう一度ここへ。'; msg.className="scoremsg more"; }
-    if(box.classList.contains("hidden")){
-      box.classList.remove("hidden");
-      setTimeout(()=>box.scrollIntoView({behavior:"smooth",block:"center"}),300);
-    }
+    else { msg.innerHTML='📘 まずは<b>基礎編のページ</b>にもどって、内力と外力・保存力と非保存力の区別を固めよう。そのうえでもう一度ここへ。'; msg.className="scoremsg more"; }
+    box.classList.remove("hidden");
   }
   function alignStage(n){
     const host=document.getElementById("stage"+n);
@@ -1812,14 +2472,15 @@ function buildPage(){
 function drawStatic(cv, sc){
   const dpr=Math.min(2,window.devicePixelRatio||1);
   const W=Math.max(240, cv.parentElement.clientWidth||400);
-  const wW=sc.world.x1-sc.world.x0, wH=sc.world.y1-sc.world.y0;
-  const s=Math.min(W/wW, 190/wH), H=wH*s;
+  const fw=sc.figWorld||sc.world;
+  const wW=fw.x1-fw.x0, wH=fw.y1-fw.y0;
+  const s=Math.min(W/wW, (sc.figH||190)/wH), H=wH*s;
   cv.style.width=W+"px"; cv.style.height=H+"px";
   cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
   const ctx=cv.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.clearRect(0,0,W,H);
   const P=new Painter(ctx);
-  P.setView(s, -sc.world.x0*s + (W-wW*s)/2, sc.world.y1*s);
+  P.setView(s, -fw.x0*s + (W-wW*s)/2, fw.y1*s);
   P.ticksOn();
   const tF=(sc.figT!==undefined?sc.figT:0);
   sc.draw(P, sc.st(tF), tF, {forces:false, allForces:false, inner:false, figure:true, obs:false, labels:true, started:false, t:tF});
@@ -1829,18 +2490,20 @@ function drawStatic(cv, sc){
 document.addEventListener("DOMContentLoaded", buildPage);
 
 /* =========================================================================
-   難関大受験編 Part 5 : 問11〜問13 のデータ
+   難関大受験編 Part 5 : 問1〜問10 のデータ
    ========================================================================= */
 
 PROBS.push(
 
-/* ------------------------------- 問11 ------------------------------- */
+/* ------------------------------- 問1 ------------------------------- */
 {
-  n:11, scene:SC11, eNote:true,
+  n:1, scene:SC11, eNote:true,
   stmt:`
-    <p>なめらかで水平な床の上に、質量 $M$ の台車が置かれている。台車の内側の左右の壁と、
-    質量 $m$ の小球が、2 本の軽いばねでつながれている。台車の内側もなめらかである。</p>
-    <p>はじめ、台車を手で押さえたまま小球を台車の中央から右へずらして静止させ、
+    <p>なめらかで水平な床の上に、質量 $M$ の台車が置かれている。台車は<b>上が開いた箱</b>の形をしていて、
+    その内側の左右の壁と、内側の床の上に置かれた質量 $m$ の小球とが、2 本の軽いばねでつながれている。</p>
+    <p><b>2 本のばねのばね定数は等しくなく</b>、左のばねを $k_1$、右のばねを $k_2$（$k_1\\ne k_2$）とする。
+    台車の内側も床もなめらかである。</p>
+    <p>はじめ、台車を手で押さえたまま小球をつり合いの位置から右へずらして静止させ、
     <b>その状態から台車と小球を同時に静かに放す</b>。</p>`,
   ab:"<span>(a) 手を放した直後</span><span>(b) 小球が反対側にいちばん寄ったとき</span><span style='margin-right:0'>を比べたとき、</span>",
   ans:{p:"yes", e:"yes"},
@@ -1848,6 +2511,9 @@ PROBS.push(
   exp:`
     <h3>① 運動量の総和 … <span style="color:#1c8f4a">保存される</span></h3>
     <p>小球と台車がおよぼし合うのは<b>ばねの弾性力（内力）</b>だけである。
+    弾性力は全部で 4 つ（左のばねの両端に 2 つ、右のばねの両端に 2 つ）。
+    <b>同じばねの両端にはたらく 2 力は大きさが等しく向きが逆</b>だが、$k_1\\ne k_2$ なので
+    左のばねの力と右のばねの力は大きさがちがう。それでも 4 つすべてが内力なので、和をとれば $0$ になる。
     鉛直方向では重力と床からの垂直抗力がつり合い、床はなめらかなので水平方向の外力はない。
     したがって<b>外力の力積が 0</b> で、運動量の総和は保存される。はじめが静止なので</p>
     <div class="eq">$$m v + M V = 0 \\qquad\\Longrightarrow\\qquad |V| = \\frac{m}{M}\\,|v|$$</div>
@@ -1857,9 +2523,10 @@ PROBS.push(
 
     <h3>② 力学的エネルギーの総和 … <span style="color:#1c8f4a">保存される</span></h3>
     <p>ばねの弾性力は<b>保存力</b>で、床も台車の内側もなめらかだから非保存力の仕事はない。</p>
-    <div class="eq">$$\\tfrac12 m v^{2}+\\tfrac12 M V^{2}+\\tfrac12 k x^{2}=\\text{一定}$$</div>
-    <p>ここで $x$ は小球の台車に対するずれ。$V=-\\dfrac{m}{M}v$ を代入すると、
-    見かけ上「質量 $\\mu=\\dfrac{mM}{m+M}$（換算質量）の 1 物体がばね定数 $k$ で単振動する」式になる。
+    <div class="eq">$$\\tfrac12 m v^{2}+\\tfrac12 M V^{2}+\\tfrac12 (k_1+k_2) x^{2}=\\text{一定}$$</div>
+    <p>ここで $x$ は小球の台車に対するずれ。2 本のばねは同じだけ伸び縮みするので、
+    合わせて<b>ばね定数 $k_1+k_2$ の 1 本のばね</b>とみなせる。$V=-\\dfrac{m}{M}v$ を代入すると、
+    見かけ上「質量 $\\mu=\\dfrac{mM}{m+M}$（換算質量）の 1 物体がばね定数 $k_1+k_2$ で単振動する」式になる。
     周期は $T=2\\pi\\sqrt{\\dfrac{\\mu}{k}}$ で、$M$ が有限だと単独のばね振り子より<b>短くなる</b>。</p>
     <div class="concl">結論：① 保存される　② 保存される。<br>
     適用範囲の図では、<b>2 つの円が重なる部分</b>にあたる。</div>
@@ -1867,9 +2534,9 @@ PROBS.push(
     台車が得た運動エネルギーも<b>系の中</b>にある。外に逃がすのは摩擦などの非保存力だけである。</div>`
 },
 
-/* ------------------------------- 問12 ------------------------------- */
+/* ------------------------------- 問2 ------------------------------- */
 {
-  n:12, scene:SC12, eNote:true,
+  n:2, scene:SC12, eNote:true,
   stmt:`
     <p>なめらかで水平な床の上で、質量 $m$ の台車 A が、ばね定数 $k$ の軽いばねで<b>壁につながれて</b>静止している
     （ばねははじめ自然長）。そこへ、同じ質量 $m$ の台車 B が速さ $v_0$ で走ってきて A に衝突する。
@@ -1904,100 +2571,359 @@ PROBS.push(
     運動量を変えるのは<b>力積</b>、力学的エネルギーを変えるのは<b>仕事</b>。壁は力を出しても動かないので仕事は $0$ である。</div>`
 },
 
-/* ------------------------------- 問13 ------------------------------- */
+/* ------------------------------- 問3 ------------------------------- */
 {
-  n:13, scene:SC13,
+  n:3, scene:SC13,
   stmt:`
     <p>なめらかで水平な床の上に、傾角 $\\theta$ のなめらかな斜面をもつ質量 $M$ の斜め台が置かれている。
-    <b>斜め台は床の上を自由に動くことができる</b>。</p>
-    <p>そこへ質量 $m$ の小球が飛んできて、斜面に当たってはね返った。
-    小球が斜面に当たる瞬間、小球はちょうど<b>最高点</b>にあり、速度は<b>水平</b>で速さは $v_0$ であった。
-    斜面に垂直な向きのはねかえり係数は $e\\;(\\lt 1)$ である。</p>`,
-  ab:"<span>(a) 衝突直前</span><span>(b) はね返った直後</span><span style='margin-right:0'>を比べたとき、</span>",
-  ans:{p:"hx", e:"no"},
+    <b>斜め台は床の上を自由に動くことができる</b>。はじめ、斜め台も小球も静止している。</p>
+    <p>質量 $m$ の小球を、斜面の真上のある高さの点から<b>静かに放す</b>。
+    小球は自由落下して斜面に当たり、はね返った。
+    斜面に垂直な向きのはねかえり係数は $e=1$（弾性衝突）である。</p>`,
+  ab:"<span>(a) 小球が最初の高さにあるとき</span><span>(b) はね返った直後</span><span style='margin-right:0'>を比べたとき、</span>",
+  ans:{p:"hx", e:"yes"},
   opts:{p:["yes","hx","no"], e:["yes","no"]},
   exp:`
     <h3>① 運動量の総和 … <span style="color:#c2700f">水平方向のみ保存される</span></h3>
-    <p>衝突のあいだ、2 物体にはたらく力を分けて考える。</p>
+    <p>(a) から (b) までを、<b>落下中</b>と<b>衝突中</b>に分けて外力を確かめる。</p>
     <ul style="margin:.3em 0 .6em 1.2em">
-      <li>小球と斜め台がおよぼし合う<b>斜面に垂直な抗力</b> …… <b>内力</b>（作用・反作用で打ち消し合う）</li>
-      <li><b>床が斜め台におよぼす垂直抗力</b> …… <b>外力</b>。斜面が小球を斜め上に押し返すとき、その反作用で台は斜め下に押される。それを支えるため、床は衝突の瞬間に非常に大きな力を上向きにおよぼす</li>
+      <li><b>落下中</b> …… 外力は<b>重力（鉛直）</b>だけ。水平方向には外力がないので、水平成分は $0$ のまま。
+      鉛直成分は $0$ から $-mv_0$ へと<b>増えていく</b></li>
+      <li><b>衝突中</b> …… 小球と斜め台がおよぼし合う<b>斜面に垂直な抗力</b>は<b>内力</b>。
+      いっぽう<b>床が斜め台におよぼす垂直抗力</b>は<b>外力</b>で、衝突の瞬間だけ非常に大きくなる。
+      ただしその向きは<b>鉛直</b>である</li>
     </ul>
-    <p>この外力は<b>鉛直方向</b>だけを向いている。だから</p>
-    <div class="eq">$$\\text{水平：}\\quad m v_0 = m v_x' + M V' \\qquad(\\text{保存される})$$</div>
-    <div class="eq">$$\\text{鉛直：}\\quad 0 \\;\\longrightarrow\\; m v_y' \\;(\\gt 0) \\qquad(\\text{保存されない})$$</div>
-    <p>小球がはね上がるための上向きの運動量は、<b>床（＝地球）</b>から受け取ったものである。</p>
+    <p>つまり (a)→(b) のあいだ、外力はつねに<b>鉛直</b>を向いている。だから</p>
+    <div class="eq">$$\\text{水平：}\\quad 0 = m v_x' + M V' \\qquad(\\text{保存される})$$</div>
+    <div class="eq">$$\\text{鉛直：}\\quad 0 \\;\\longrightarrow\\; m v_y' \\;(\\ne 0) \\qquad(\\text{保存されない})$$</div>
+    <p>数値（$m=1.0$ kg、$M=3.0$ kg、$\\theta=30^\\circ$、$v_0=4.0$ m/s、$e=1$）で計算すると</p>
+    <div class="eq">$$\\vec v'=(-3.20,\\;+1.54)\\ \\text{m/s},\\qquad V'=+1.07\\ \\text{m/s}$$</div>
+    <div class="eq">$$\\text{水平：}\\;1.0\\times(-3.20)+3.0\\times(+1.07)=0,\\qquad
+      \\text{鉛直：}\\;0 \\longrightarrow +1.54\\ \\text{kg·m/s}$$</div>
     <div class="kv"><b>難関大での使い方</b>：斜面がある衝突では、力の向きを「<b>斜面に垂直</b>」と「<b>鉛直</b>」に分けて考える。
-    内力は斜面に垂直、床からの外力は鉛直。<b>外力が向いていない方向＝水平方向</b>だけが保存される。</div>
+    内力は斜面に垂直、床からの外力は鉛直。<b>外力が向いていない方向＝水平方向</b>だけが保存される。
+    「重心の水平位置が動かない」と言いかえてもよい。</div>
 
-    <h3>② 力学的エネルギーの総和 … <span style="color:#c0392b">保存されない</span></h3>
-    <p>斜面はなめらかなので摩擦はないが、はねかえり係数が $e\\lt 1$ である。
-    これは衝突のときに<b>変形などで力学的エネルギーが失われる</b>ことを意味する。</p>
-    <p>斜面に垂直な向きの相対速度は $e$ 倍になり、斜面に平行な向きの相対速度は変わらない。数値
-    （$m=1.0$ kg、$M=3.0$ kg、$\\theta=60^\\circ$、$v_0=3.0$ m/s、$e=0.6$）で計算すると</p>
-    <div class="eq">$$v'=(0.12,\\;1.66)\\ \\text{m/s},\\qquad V'=0.96\\ \\text{m/s}$$</div>
-    <div class="eq">$$\\tfrac12 m v_0^{2}=4.5\\ \\text{J}\\;\\longrightarrow\\;\\tfrac12 m v'^{2}+\\tfrac12 M V'^{2}=2.8\\ \\text{J}$$</div>
-    <p>もし $e=1$（弾性衝突）なら力学的エネルギーは保存される。<b>①と②は別々に判断する</b>ことが大切である。</p>
-    <div class="concl">結論：① 水平方向のみ保存される　② 保存されない。<br>
-    適用範囲の図では、<b>運動量保存の円だけに入る部分（ただし水平方向に限る）</b>にあたる。</div>
-    <div class="warn"><b>ここに注意</b>：「なめらか＝力学的エネルギー保存」ではない。
-    なめらかでも、はねかえり係数が $1$ でなければ衝突でエネルギーは失われる。</div>`
+    <h3>② 力学的エネルギーの総和 … <span style="color:#1c8f4a">保存される</span></h3>
+    <p>はたらく力を仕事の観点で分ける。</p>
+    <ul style="margin:.3em 0 .6em 1.2em">
+      <li>保存力 …… <b>重力</b>（位置エネルギーとして数える）</li>
+      <li>非保存力 …… <b>なし</b>。斜面も床もなめらかで摩擦はなく、はねかえり係数が $e=1$ なので衝突でも失われない。
+      床からの垂直抗力は鉛直向きだが、台は水平にしか動かないので<b>仕事は $0$</b></li>
+    </ul>
+    <div class="eq">$$mgh \\;=\\; \\tfrac12 m v'^{2}+\\tfrac12 M V'^{2}+mgh' \\;=\\; 13.7\\ \\text{J}\\;(\\text{一定})$$</div>
+    <div class="concl">結論：① 水平方向のみ保存される　② 保存される。<br>
+    適用範囲の図では、<b>2 つの円が重なる部分</b>にあたる（ただし運動量は水平方向に限る）。</div>
+    <div class="warn"><b>ここが大事</b>：①と②は<b>まったく別の基準</b>で決まる。
+    ①は「外力の<b>力積</b>があるか」、②は「非保存力の<b>仕事</b>があるか」。
+    この問題では床が大きな外力を出す（→①はくずれる）のに、その力は仕事をしない（→②は成り立つ）。
+    <b>「外力があるからエネルギーも保存しない」は誤り</b>である。</div>`
 }
 
 ,
 
-/* ------------------------------- 問14 ------------------------------- */
+/* ------------------------------- 問4 ------------------------------- */
 {
-  n:14, scene:SC14,
+  n:4, scene:SC14,
   stmt:`
-    <p>問 13 と同じ装置で、斜め台の底面の両側に<b>ストッパー</b>を置き、
+    <p>問 3 と同じ装置で、斜め台の底面の両側に<b>ストッパー</b>を置き、
     斜め台が床の上を<b>動かないように固定</b>した。</p>
-    <p>そこへ質量 $m$ の小球が真上から落ちてきて、斜面に当たってはね返った。
-    斜面に当たる直前の速さは $v_0$（真下向き）、斜面に垂直な向きのはねかえり係数は $e\\;(\\lt 1)$ である。</p>`,
-  ab:"<span>(a) 衝突直前</span><span>(b) はね返った直後</span><span style='margin-right:0'>を比べたとき、</span>",
-  ans:{p:"no", e:"no"},
+    <p>質量 $m$ の小球を、問 3 とまったく同じ高さから<b>静かに放す</b>。
+    小球は自由落下して斜面に当たり、はね返った。
+    斜面に垂直な向きのはねかえり係数は $e=1$（弾性衝突）である。</p>`,
+  ab:"<span>(a) 小球が最初の高さにあるとき</span><span>(b) はね返った直後</span><span style='margin-right:0'>を比べたとき、</span>",
+  ans:{p:"no", e:"yes"},
   opts:{p:["yes","hx","no"], e:["yes","no"]},
   exp:`
     <h3>① 運動量の総和 … <span style="color:#c0392b">保存されない</span></h3>
-    <p>問 13 との違いは<b>ストッパーがあること</b>だけである。しかしこれで結論が大きく変わる。</p>
+    <p>問 3 との違いは<b>ストッパーがあること</b>だけである。しかしこれで結論が変わる。</p>
     <ul style="margin:.3em 0 .6em 1.2em">
       <li>小球と斜め台がおよぼし合う<b>斜面に垂直な抗力</b> …… <b>内力</b></li>
-      <li><b>ストッパーと床が台におよぼす力</b> …… <b>外力</b>。台が動かないよう、水平にも鉛直にも支える</li>
+      <li><b>ストッパーと床が台におよぼす力</b> …… <b>外力</b>。台が動かないよう、<b>水平にも鉛直にも</b>支える</li>
+      <li>重力 …… 外力（鉛直）</li>
     </ul>
-    <p>外力が<b>水平方向にも鉛直方向にもはたらく</b>ので、どちらの成分も保存されない。数値で見ると</p>
-    <div class="eq">$$\\text{水平：}\\; 0 \\longrightarrow -3.2 \\; \\text{kg·m/s},\\;
-      \\text{鉛直：}\\; -4.0 \\longrightarrow -0.8 \\; \\text{kg·m/s}$$</div>
-    <div class="kv"><b>問 13 との対比</b>：台が自由に動けるときは、台が受け取った水平方向の運動量が系の中に残るので水平成分は保存された。
-    台を固定すると、その運動量は<b>地球へ逃げてしまう</b>。「固定されているか、動けるか」で答えが変わることを必ず確認しよう。</div>
+    <p>外力が水平方向にも鉛直方向にもはたらくので、どちらの成分も保存されない。数値で見ると</p>
+    <div class="eq">$$\\vec v'=(-3.46,\\;+2.00)\\ \\text{m/s}$$</div>
+    <div class="eq">$$\\text{水平：}\\; 0 \\longrightarrow -3.46\\ \\text{kg·m/s},\\qquad
+      \\text{鉛直：}\\; 0 \\longrightarrow +2.00\\ \\text{kg·m/s}$$</div>
+    <div class="kv"><b>問 3 との対比</b>：台が自由に動けるときは、台が受け取った水平方向の運動量が<b>系の中</b>に残るので水平成分は保存された。
+    台を固定すると、その運動量は<b>ストッパーを通して地球へ逃げてしまう</b>。
+    「固定されているか、動けるか」で①の答えが変わることを必ず確認しよう。</div>
+
+    <h3>② 力学的エネルギーの総和 … <span style="color:#1c8f4a">保存される</span></h3>
+    <p>斜面はなめらかで、はねかえり係数は $e=1$。しかも<b>ストッパーも床も動かないので、外力は仕事をしない</b>。
+    だから非保存力の仕事は $0$ で、力学的エネルギーは保存される。</p>
+    <div class="eq">$$mgh=\\tfrac12 m v'^{2}+mgh'=13.7\\ \\text{J}\\;(\\text{一定})$$</div>
+    <p>実際、はね返った直後の速さは $\\sqrt{3.46^{2}+2.00^{2}}=4.0$ m/s で、当たる直前と同じである。</p>
+    <div class="concl">結論：① 保存されない　② 保存される。<br>
+    適用範囲の図では、<b>力学的エネルギー保存の円だけに入る部分</b>にあたる（基礎編の問 8・この編の問 2 と同じ位置）。</div>
+    <div class="warn"><b>問 3 とならべて覚える</b>：3 と 4 は<b>②はどちらも保存され、①だけが変わる</b>。
+    エネルギーを決めるのは「なめらかか」「$e=1$ か」、運動量を決めるのは「外力がどの向きにあるか」。
+    2 つの保存則を<b>別々に</b>判断する練習として、この 2 問を必ずセットで見直そう。</div>`
+}
+
+,
+
+/* ------------------------------- 問5 ------------------------------- */
+{
+  n:5, scene:SC15,
+  stmt:`
+    <p>なめらかで水平な床の上（図は<b>真上から見た図</b>）に、質量 $m$ の小球 A と質量 $M$ の小球 B があり、
+    長さ $L$ の軽いひもで結ばれている。</p>
+    <p>2 球に適当な初速度を与えたところ、2 球はひもをぴんと張ったまま、
+    共通の<b>重心のまわりを角速度 $\\omega$ で等速円運動</b>した。</p>`,
+  ab:"<span>(a) はじめの位置</span><span>(b) 半回転したとき</span><span style='margin-right:0'>を比べたとき、</span>",
+  ans:{p:"yes", e:"yes"},
+  opts:{p:["yes","hx","no"], e:["yes","no"]},
+  exp:`
+    <h3>① 運動量の総和 … <span style="color:#1c8f4a">保存される</span></h3>
+    <p>2 球がおよぼし合うのは<b>ひもの張力（内力）</b>だけである。作用・反作用の法則より大きさは等しく向きは逆で、和は $0$。
+    鉛直方向では重力と垂直抗力がつり合い、床はなめらかなので水平方向の外力もない。</p>
+    <div class="eq">$$m\\vec v + M\\vec V = \\vec 0\\qquad(\\text{はじめから終わりまでずっと})$$</div>
+    <p>つまり運動量の総和は $\\vec 0$ のままで保存される。これは<b>重心が動かない</b>ことと同じ意味である。</p>
+    <div class="kv"><b>半径の比</b>：重心が動かないので $m r_1 = M r_2$、$r_1+r_2=L$。よって
+    $r_1=\\dfrac{M}{m+M}L,\\; r_2=\\dfrac{m}{m+M}L$。$m:M=1:3$ なら $r_1:r_2=3:1$ で、
+    <b>軽いほうが大きく回る</b>。$m=1.0$ kg、$M=3.0$ kg、$L=2.0$ m なら $r_1=1.5$ m、$r_2=0.5$ m である。</div>
+
+    <h3>② 力学的エネルギーの総和 … <span style="color:#1c8f4a">保存される</span></h3>
+    <p>ひもの張力はつねに<b>速度に垂直</b>（円の中心を向く向心力）なので、<b>仕事をしない</b>。
+    床はなめらかで摩擦もない。したがって 2 球の速さはそれぞれ一定に保たれ、</p>
+    <div class="eq">$$\\tfrac12 m (r_1\\omega)^{2}+\\tfrac12 M (r_2\\omega)^{2}
+      =\\tfrac12(1.0)(3.0)^2+\\tfrac12(3.0)(1.0)^2=6.0\\ \\text{J}\\;=\\;\\text{一定}$$</div>
+    <p>張力は「向きを変える」だけで「速さを変えない」――これが等速円運動の本質である。</p>
+    <div class="concl">結論：① 保存される　② 保存される。<br>
+    適用範囲の図では、<b>2 つの円が重なる部分</b>にあたる。</div>
+    <div class="warn"><b>ここに注意</b>：「速度の向きが変わっているのだから運動量は保存されないのでは？」と思いがちだが、
+    問われているのは<b>2 物体の運動量の総和</b>である。個々の運動量 $m\\vec v$、$M\\vec V$ は向きを変え続けるが、
+    その和はつねに $\\vec 0$ で変わらない。</div>`
+},
+
+/* ------------------------------- 問6 ------------------------------- */
+{
+  n:6, scene:SC16, eNote:"万有引力による位置エネルギーを含む",
+  stmt:`
+    <p>宇宙空間の、まわりに他の天体がまったくない場所に、質量 $M$ の地球と質量 $m$ の月がある。</p>
+    <p>2 天体は互いの<b>万有引力だけ</b>で、共通の重心のまわりを角速度 $\\omega$ で等速円運動している。
+    これを<b>共通重心上の観測者</b>から見る。</p>`,
+  ab:"<span>(a) はじめの位置</span><span>(b) 半回転したとき</span><span style='margin-right:0'>を比べたとき、</span>",
+  ans:{p:"yes", e:"yes"},
+  opts:{p:["yes","hx","no"], e:["yes","no"]},
+  exp:`
+    <h3>① 運動量の総和 … <span style="color:#1c8f4a">保存される</span></h3>
+    <p>地球と月が引き合う<b>万有引力は内力</b>（作用・反作用）である。まわりに他の天体がないので、<b>外力は 0</b>。
+    したがって運動量の総和は変わらない。共通重心上の観測者から見れば、その総和はつねに</p>
+    <div class="eq">$$m\\vec v + M\\vec V = \\vec 0$$</div>
+    <p>である。2 天体の運動量は、大きさが等しく向きが正反対で、いつでも打ち消し合う。</p>
+    <div class="kv"><b>この観測者で考えてよい理由</b>：外力が $0$ だから、重心は<b>等速直線運動（または静止）</b>をする。
+    等速で動く座標系は<b>慣性系</b>なので、そこでも運動方程式・運動量保存・エネルギー保存がそのまま使える。
+    <b>「重心とともに動く観測者に乗る」</b>のは、難関大の 2 体問題でいちばん強力な道具である。</div>
+    <div class="kv"><b>軌道半径の比</b>：重心が動かないので $m r_1 = M r_2$、$r_1+r_2=L$。よって
+    $r_1=\\dfrac{M}{m+M}L,\\; r_2=\\dfrac{m}{m+M}L$。$m:M=1:3$ なら、
+    軽い月のほうが $3$ 倍大きい円をえがき、速さも $3$ 倍である。</div>
+
+    <h3>② 力学的エネルギーの総和 … <span style="color:#1c8f4a">保存される</span></h3>
+    <p>はたらく力は万有引力だけで、これは<b>保存力</b>である。摩擦のような非保存力はない。</p>
+    <div class="eq">$$\\tfrac12 m v^{2}+\\tfrac12 M V^{2}
+      +\\left(-G\\frac{mM}{L}\\right)=\\text{一定}$$</div>
+    <p>軌道は円なので中心間の距離 $L$ は一定に保たれ、万有引力による位置エネルギーも一定。
+    それぞれの速さも一定なので、総和はもちろん一定である。</p>
+    <div class="concl">結論：① 保存される　② 保存される。<br>
+    適用範囲の図では、<b>2 つの円が重なる部分</b>にあたる。</div>
+    <div class="warn"><b>ここに注意</b>：力学的エネルギーを数えるときは、<b>万有引力による位置エネルギー
+    $U=-G\\dfrac{mM}{r}$ を忘れない</b>こと。運動エネルギーだけを見ていると、
+    だ円軌道の場合に「保存していない」と誤解してしまう。</div>`
+},
+
+/* ------------------------------- 問7 ------------------------------- */
+{
+  n:7, scene:SC17, eNote:"万有引力による位置エネルギーを含む",
+  stmt:`
+    <p>問 6 と同じ地球（質量 $M$）と月（質量 $m$）が、こんどは<b>太陽のまわりを半径 $R$ の円軌道で公転</b>している。
+    地球と月は、たがいの万有引力で重心のまわりを回りながら、全体として太陽のまわりを回っている。</p>
+    <p><b>地球と月の 2 天体だけ</b>を「系」とみなして考える。太陽は十分質量が大きく、動かないとする。</p>`,
+  ab:"<span>(a) はじめの位置</span><span>(b) 半分公転したとき</span><span style='margin-right:0'>を比べたとき、</span>",
+  ans:{p:"no", e:"yes"},
+  opts:{p:["yes","hx","no"], e:["yes","no"]},
+  exp:`
+    <h3>① 運動量の総和 … <span style="color:#c0392b">保存されない</span></h3>
+    <p>系を「地球＋月」に限ると、力は次のように分かれる。</p>
+    <ul style="margin:.3em 0 .6em 1.2em">
+      <li>地球と月がおよぼし合う万有引力 …… <b>内力</b></li>
+      <li><b>太陽が地球・月を引く万有引力</b> …… <b>外力</b></li>
+    </ul>
+    <p>外力があるので運動量は保存されない。実際、系の運動量の総和は</p>
+    <div class="eq">$$m\\vec v+M\\vec V=(m+M)\\vec V_G$$</div>
+    <p>で、<b>大きさ</b>は $(m+M)R\\Omega$ で一定だが、$\\vec V_G$ は公転にともなって<b>向きが変わり続ける</b>。
+    半分公転した (b) では、(a) とちょうど<b>逆向き</b>になっている。運動量は<b>ベクトル</b>なので、これは保存されていない。</p>
+    <div class="kv"><b>系の取り方で答えが変わる</b>：問 6（まわりに何もない）では保存され、問 7（太陽がある）では保存されない。
+    もし<b>太陽まで含めて</b>系とすれば、太陽の万有引力は内力になり、ふたたび運動量は保存される。
+    「どこまでを系とみるか」を最初に宣言する習慣をつけよう。</div>
+
+    <h3>② 力学的エネルギーの総和 … <span style="color:#1c8f4a">保存される</span></h3>
+    <p>太陽の万有引力も、地球–月の万有引力も、どちらも<b>保存力</b>である。非保存力ははたらいていない。</p>
+    <div class="eq">$$\\tfrac12 m v^{2}+\\tfrac12 M V^{2}
+      -G\\frac{mM}{L}-G\\frac{M_{\\odot}(m+M)}{R}=\\text{一定}$$</div>
+    <p>軌道はどちらも円なので $R$ も $L$ も一定で、位置エネルギーは変わらない。
+    運動エネルギーの和も一定なので、力学的エネルギーの総和は保存される。</p>
+    <div class="concl">結論：① 保存されない　② 保存される。<br>
+    適用範囲の図では、<b>力学的エネルギー保存の円だけに入る部分</b>にあたる（問 2 と同じ位置）。</div>
+    <div class="warn"><b>ここに注意</b>：外力があっても、その外力が<b>保存力</b>なら、
+    位置エネルギーとして数え入れることで力学的エネルギーは保存される。
+    <b>①（力積で判断）と②（仕事で判断）はまったく別の基準</b>だと、あらためて確認しよう。</div>`
+},
+
+/* ------------------------------- 問8 ------------------------------- */
+{
+  n:8, scene:SC18, eNote:"重力による位置エネルギーを含む",
+  stmt:`
+    <p>質量 $m$ の小球 A、B が、長さ $l$ の軽いひもの両端につながれている。
+    図のように水平な天井に、小球 A、B を $l$ だけ離して固定した（ひもはぴんと張っている）。
+    小球 B を固定した点を O とし、重力加速度の大きさを $g$ とする。
+    小球の大きさ、ひもの質量、空気抵抗は無視できるものとする。</p>
+    <p>まず、<b>小球 B を固定したまま小球 A を静かにはなす</b>。
+    小球 A が初めて最下点（$\\theta=\\dfrac{\\pi}{2}$）に達したときに、<b>小球 B を静かにはなした</b>。
+    この時刻を $t=0$ とする。</p>`,
+  ab:"<span>(a) <i>t</i> = 0 のとき</span><span>(b) 小球 A が共通重心のまわりを半周したとき</span><span style='margin-right:0'>を比べたとき、</span>",
+  ans:{p:"hx", e:"yes"},
+  opts:{p:["yes","hx","no"], e:["yes","no"]},
+  exp:`
+    <h3>① 運動量の総和 … <span style="color:#c2700f">水平方向のみ保存される</span></h3>
+    <p>$t=0$ で B を放したあと、2 球にはたらく力は次の 2 種類しかない。</p>
+    <ul style="margin:.3em 0 .6em 1.2em">
+      <li><b>ひもの張力</b> …… A と B が引き合う力なので<b>内力</b></li>
+      <li><b>重力</b> …… <b>外力</b>。ただし向きは<b>鉛直</b>だけ</li>
+    </ul>
+    <p>天井が B を支える力は、B をはなした瞬間になくなっている。
+    したがって<b>水平方向には外力がまったくない</b>ので</p>
+    <div class="eq">$$\\text{水平：}\\quad m v_0 = \\text{一定}\\qquad\\left(v_0=\\sqrt{2gl}\\,\\right)$$</div>
+    <div class="eq">$$\\text{鉛直：}\\quad 0 \\;\\longrightarrow\\; -2mg\\,t \\qquad(\\text{保存されない})$$</div>
+    <p>数値（$m=1.0$ kg、$l=0.50$ m）では $v_0=3.13$ m/s なので、水平成分はずっと $3.13$ kg·m/s。
+    半周するまでの時間は $t=\\pi\\sqrt{\\dfrac{l}{2g}}=0.50$ s で、そのとき鉛直成分は $-9.8$ kg·m/s になっている。</p>
+    <div class="kv"><b>重心で見るとよくわかる</b>：外力は重力だけなので、系の重心は
+    <b>水平方向は等速・鉛直方向は自由落下</b>、つまり<b>放物運動</b>をする。
+    2 球は重心のまわりを半径 $\\dfrac{l}{2}$、角速度 $\\omega=\\dfrac{v_0}{l}$ で等速円運動する。
+    半周の時間は $\\dfrac{\\pi}{\\omega}=\\dfrac{\\pi l}{v_0}=\\pi\\sqrt{\\dfrac{l}{2g}}$ である。</div>
+    <div class="warn"><b>区間の取り方に注意</b>：$t=0$ より<b>前</b>は B が天井に固定されており、
+    天井が B におよぼす力（外力）に水平成分があるので、水平方向の運動量も保存されない
+    （$0 \\to mv_0$ と増えていく）。アニメのグラフで、$t=0$ より前の区間を見て確かめよう。</div>
+
+    <h3>② 力学的エネルギーの総和 … <span style="color:#1c8f4a">保存される</span></h3>
+    <p>はたらく力 → 保存力：<b>重力</b>。非保存力：<b>なし</b>。</p>
+    <p>ひもの張力は内力であり、しかも<b>伸び縮みしないひも</b>なので、A にする仕事と B にする仕事は
+    たがいに打ち消し合って和は $0$ になる（重心系で見れば、張力はつねに速度に垂直である）。</p>
+    <div class="eq">$$\\tfrac12 m v_{\\rm A}^{2}+\\tfrac12 m v_{\\rm B}^{2}+mgy_{\\rm A}+mgy_{\\rm B}=\\text{一定}$$</div>
+    <p>じつは A をはなした瞬間から (b) まで<b>ずっと</b>一定である
+    （B を固定していた区間でも、天井は動かない B を支えるだけで仕事をしない）。
+    アニメのエネルギーグラフで、黒い太線がまっすぐなことを確かめよう。</p>
+    <div class="concl">結論：① 水平方向のみ保存される　② 保存される。<br>
+    適用範囲の図では、<b>2 つの円が重なる部分</b>にあたる（ただし運動量は水平方向に限る）。問 3 と同じ位置である。</div>
+    <div class="warn"><b>ここが大事</b>：①と②は別の基準で決まる。
+    重力は「外力」だから①をこわす（鉛直成分は保存されない）が、
+    同時に「保存力」だから②はこわさない（位置エネルギーとして数えられる）。
+    <b>同じ 1 つの力が、①では外力・②では保存力としてはたらく</b>——ここを混同しないこと。</div>`
+},
+
+/* ------------------------------- 問9 ------------------------------- */
+{
+  n:9, scene:SC19, eNote:"質量欠損のエネルギーは含めない",
+  stmt:`
+    <p>宇宙空間で静止している質量 $M$ の原子核が、質量 $m$ の $\\alpha$ 粒子（ヘリウム原子核）を放出して、
+    質量 $M-m$ の娘核に変わった（$\\alpha$ 崩壊）。</p>
+    <p>まわりに他の物体はなく、重力の影響は無視できるものとする。</p>`,
+  ab:"<span>(a) 崩壊前</span><span>(b) 崩壊後</span><span style='margin-right:0'>を比べたとき、</span>",
+  ans:{p:"yes", e:"no"},
+  opts:{p:["yes","hx","no"], e:["yes","no"]},
+  exp:`
+    <h3>① 運動量の総和 … <span style="color:#1c8f4a">保存される</span></h3>
+    <p>核が 2 つに分かれるときに押し合う力は、$\\alpha$ 粒子と娘核の間ではたらく<b>内力</b>である。
+    まわりに他の物体がないので<b>外力は 0</b>。したがって運動量の総和は、はじめの $0$ のまま保存される。</p>
+    <div class="eq">$$0 = m v + (M-m)V \\qquad\\Longrightarrow\\qquad |V|=\\frac{m}{M-m}|v|$$</div>
+    <p>つまり $\\alpha$ 粒子と娘核は必ず<b>正反対の向き</b>に飛び出し、速さの比は<b>質量の逆比</b>になる。
+    実際の $\\alpha$ 崩壊では娘核が $\\alpha$ 粒子の 50 倍以上重いので、娘核はほとんど動かず、
+    <b>放出されるエネルギーのほとんどを $\\alpha$ 粒子が運動エネルギーとして持ち去る</b>。</p>
+    <div class="kv"><b>入試での使い方</b>：「静止していたものが 2 つに分かれる」型は、基礎編の問 5（ばねによる分裂）とまったく同じ構造である。
+    核反応でも運動量保存はそのまま使える。$\\alpha$ 粒子の運動エネルギー $K_\\alpha$ と娘核の $K_M$ の比は、
+    $K=\\dfrac{p^2}{2m}$ と $|p|$ が等しいことから $K_\\alpha : K_M = (M-m) : m$ になる。</div>
 
     <h3>② 力学的エネルギーの総和 … <span style="color:#c0392b">保存されない</span></h3>
-    <p>斜面はなめらかで、ストッパーも床も動かないから<b>外力は仕事をしない</b>。
-    それでも、はねかえり係数が $e\\;(\\lt 1)$ なので、衝突のときに変形などで力学的エネルギーが失われる。</p>
-    <div class="eq">$$\\tfrac12 m v_0^{2}=8.0\\;\\text{J}\\; \\longrightarrow \\; \\tfrac12 m v'^{2}=5.4\\;\\text{J}$$</div>
-    <div class="concl">結論：① 保存されない　② 保存されない。<br>
-    適用範囲の図では、<b>2 つの円のどちらにも入らない、いちばん外側の部分</b>にあたる。</div>
-    <div class="warn"><b>ここに注意</b>：外力があっても、その外力が<b>仕事をしなければ</b>力学的エネルギーは保存されることがある（問 12・問 8）。
-    この問題でエネルギーが減るのは外力のせいではなく、<b>$e\\;(\\lt 1)$ の衝突</b>のせいである。理由を取りちがえないこと。</div>`
+    <p>崩壊前は静止していたので運動エネルギーは $0$、位置エネルギーも考えなくてよい。
+    ところが崩壊後には 2 つの破片が動いているので、力学的エネルギーは<b>増えている</b>。</p>
+    <div class="eq">$$0 \\;\\longrightarrow\\; \\tfrac12 m v^{2}+\\tfrac12 (M-m)V^{2}\\;(\\gt 0)$$</div>
+    <p>増えたぶんは、<b>もとの原子核が $\\alpha$ 粒子と娘核に変わるときの「質量欠損」によるエネルギー</b>から来たものである。
+    崩壊の前後で質量の和はごくわずかに減っており、その差を $\\Delta m$ とすると、
+    アインシュタインの関係 $E=\\Delta m c^{2}$ の分だけエネルギーが生まれ、それが 2 つの破片の運動エネルギーになった。
+    <b>力学的エネルギーだけを見れば、保存していない</b>。</p>
+    <div class="concl">結論：① 保存される　② 保存されない。<br>
+    適用範囲の図では、<b>運動量保存の円だけに入る部分</b>にあたる（非弾性衝突と同じ位置。ただしこちらは<b>増える</b>側）。</div>
+    <div class="warn"><b>ここに注意</b>：非弾性衝突では力学的エネルギーは<b>減る</b>が、崩壊や爆発では<b>増える</b>。
+    どちらも「力学的エネルギーは保存しない」で同じ仲間である。増えるか減るかではなく、
+    <b>力学的エネルギー以外との出入りがあるかどうか</b>で判断すること。</div>`
+},
+
+/* ------------------------------- 問10 ------------------------------- */
+{
+  n:10, scene:SC20, eNote:"X 線のエネルギーを含む",
+  stmt:`
+    <p>静止している電子（質量 $m$）に<b>波長 $\\lambda$ の X 線</b>を当てたところ、
+    X 線は入射方向から角 $\\theta$ だけ曲げられて散乱し（散乱 X 線の波長を $\\lambda\\prime$ とする）、
+    電子は角 $\\varphi$ の向きに速さ $v$ ではね飛ばされた（<b>コンプトン効果</b>）。</p>
+    <p>X 線（光子）は、エネルギー $\\dfrac{hc}{\\lambda}$ と運動量 $\\dfrac{h}{\\lambda}$ をもつと考えてよい。
+    まわりに他の物体はない。<b>X 線と電子の 2 つ</b>を「系」とみなして考える。</p>`,
+  ab:"<span>(a) 衝突前</span><span>(b) 衝突後</span><span style='margin-right:0'>を比べたとき、</span>",
+  ans:{p:"yes", e:"yes"},
+  opts:{p:["yes","hx","no"], e:["yes","no"]},
+  exp:`
+    <h3>① 運動量の総和 … <span style="color:#1c8f4a">保存される</span></h3>
+    <p>X 線（光子）と電子がおよぼし合う力は<b>内力</b>だけで、外力はまったくない。
+    だから運動量は<b>ベクトルとして</b>保存される。$x$ 成分・$y$ 成分に分けて式を立てる。</p>
+    <div class="eq">$$x\\ \\text{方向：}\\quad \\frac{h}{\\lambda}
+      =\\frac{h}{\\lambda\\prime}\\cos\\theta + mv\\cos\\varphi$$</div>
+    <div class="eq">$$y\\ \\text{方向：}\\quad 0
+      =\\frac{h}{\\lambda\\prime}\\sin\\theta - mv\\sin\\varphi$$</div>
+    <p>数値（$m=4.0$、入射 X 線 $h/\\lambda=3.0$、$\\theta=60^\\circ$、$c=1$ とする相対値）では
+    $h/\\lambda\\prime=2.11$、$mv=2.67$、$\\varphi=43^\\circ$ となり</p>
+    <div class="eq">$$x：2.11\\cos 60^\\circ+2.67\\cos 43^\\circ=1.06+1.94=3.00,\\qquad
+      y：2.11\\sin 60^\\circ-2.67\\sin 43^\\circ=1.83-1.83=0$$</div>
+    <div class="kv"><b>光子も運動量をもつ</b>：質量が $0$ でも運動量はもつ、というのが量子論の要点である。
+    ふつうの 2 球の斜めの衝突（基礎編の問 6）とまったく同じように、
+    <b>運動量保存を $x$・$y$ に分けて 2 式、エネルギー保存で 1 式</b>を立てればよい。</div>
+
+    <h3>② エネルギーの総和 … <span style="color:#1c8f4a">保存される</span></h3>
+    <p>熱や変形にエネルギーを捨てるしくみがないので、<b>X 線のエネルギーを数え入れれば</b>総和は保存される。</p>
+    <div class="eq">$$\\frac{hc}{\\lambda}=\\frac{hc}{\\lambda\\prime}+\\frac12 mv^{2}$$</div>
+    <p>上の数値では $3.00 = 2.11 + 0.89$ でぴたりと合う。
+    X 線はエネルギーの一部を電子にわたすので、散乱 X 線は<b>振動数が下がり、波長がのびる</b>
+    （$\\lambda\\prime/\\lambda = 3.00/2.11 = 1.42$ 倍）。</p>
+    <p>この 3 つの式から $\\varphi$ を消去すると、有名な<b>コンプトンの式</b></p>
+    <div class="eq">$$\\lambda\\prime-\\lambda=\\frac{h}{mc}\\,(1-\\cos\\theta)$$</div>
+    <p>が導かれる。$\\theta=0$（まっすぐ進む）なら波長は変わらず、$\\theta=180^\\circ$（真後ろ）で最大にのびる。</p>
+    <div class="concl">結論：① 保存される　② 保存される。<br>
+    適用範囲の図では、<b>2 つの円が重なる部分（弾性衝突と同じ位置）</b>にあたる。</div>
+    <div class="warn"><b>ここに注意</b>：「力学的エネルギー」はふつう運動エネルギーと位置エネルギーの和を指すが、
+    この問題では<b>X 線のエネルギー $hc/\\lambda$</b> も数え入れている。
+    <b>「何をエネルギーとして数えるか」を決めてから保存を論じる</b>——これが難関大で問われる姿勢である。
+    問 9（$\\alpha$ 崩壊）では質量欠損のエネルギーを数えなかったので「保存しない」、
+    この問題では X 線のエネルギーを数えたので「保存する」。基準のとり方で答えが変わることを意識しよう。</div>`
 }
 
 );
 
 /* =========================================================================
-   短い解説（3 点セット）  問11〜
+   短い解説（3 点セット）  難関大受験編 問1〜10
    ========================================================================= */
 const BRIEF = {
 
-11:`<div class="bl"><b>＜慣性系から見た運動の様子＞</b>
+1:`<div class="bl"><b>＜慣性系から見た運動の様子＞</b>
   台車の中で小球が左右に振動し、台車はいつも小球と逆向きに動く。全体としては行ったり来たりするだけ。</div>
 <div class="bl"><b>＜2 物体の運動量が保存するかの判断理由＞</b>
-  内力：2 本のばねの弾性力（小球に 2 つ、左右の壁に 1 つずつ、全部で 4 つ。どれも大きさは同じ）。
+  内力：2 本のばねの弾性力（小球に 2 つ、左右の壁に 1 つずつ、全部で 4 つ。同じばねの両端は大きさが等しいが、$k_1\\ne k_2$ なので左右では大きさがちがう）。
   外力：重力・床からの垂直抗力（つり合う）。
   <b>よって運動量は保存する（$0$ のまま＝重心は動かない）。</b></div>
 <div class="bl"><b>＜2 物体の力学的エネルギーが保存するかの判断理由＞</b>
   はたらく力 → 保存力：ばねの弾性力。非保存力：なし（床も台車の内側もなめらか）。
   <b>よって力学的エネルギーは保存する。</b></div>`,
 
-12:`<div class="bl"><b>＜慣性系から見た運動の様子＞</b>
+2:`<div class="bl"><b>＜慣性系から見た運動の様子＞</b>
   B が A に弾性衝突して速度が入れかわり、A がばねを縮めてはね返り、もう一度 B に当たって B が逆向きに走り去る。</div>
 <div class="bl"><b>＜2 物体の運動量が保存するかの判断理由＞</b>
   内力：衝突のとき A と B が押し合う力。外力：重力・垂直抗力（つり合う）＋<b>壁がばねを通しておよぼす力</b>。
@@ -2007,27 +2933,76 @@ const BRIEF = {
   はたらく力 → 保存力：ばねの弾性力。非保存力：なし（$e=1$、壁は動かないので仕事をしない）。
   <b>よって力学的エネルギーは保存する。</b></div>`,
 
-13:`<div class="bl"><b>＜慣性系から見た運動の様子＞</b>
-  水平に飛んできた小球が斜面に当たって斜め上にはね返り、斜め台は右へすべり出す。</div>
+3:`<div class="bl"><b>＜慣性系から見た運動の様子＞</b>
+  静かに放した小球が落ちて斜面に当たり、斜め上にはね返る。斜め台は反対向きにすべり出す。</div>
 <div class="bl"><b>＜2 物体の運動量が保存するかの判断理由＞</b>
-  内力：斜面に垂直な抗力。外力：重力・<b>床から台への垂直抗力</b>（鉛直向き。衝突の瞬間は非常に大きい）。
-  <b>よって水平方向のみ運動量は保存する。</b></div>
+  内力：斜面に垂直な抗力。外力：重力・<b>床から台への垂直抗力</b>（どちらも鉛直向き。衝突の瞬間は非常に大きい）。
+  <b>よって水平方向のみ運動量は保存する（$0$ のまま）。</b></div>
 <div class="bl"><b>＜2 物体の力学的エネルギーが保存するかの判断理由＞</b>
-  はたらく力 → 保存力：重力。非保存力：衝突で変形にともなう力（$e\\lt 1$）。
-  <b>よって力学的エネルギーは保存しない。</b></div>`
+  はたらく力 → 保存力：重力。非保存力：なし（斜面も床もなめらか、$e=1$。床の抗力は鉛直で台は水平にしか動かないので仕事をしない）。
+  <b>よって力学的エネルギーは保存する。</b></div>`,
 
-
-,
-
-14:`<div class="bl"><b>＜慣性系から見た運動の様子＞</b>
-  上から落ちてきた小球が、固定された斜面に当たって斜め左下へはね返る。斜め台はまったく動かない。</div>
+4:`<div class="bl"><b>＜慣性系から見た運動の様子＞</b>
+  静かに放した小球が落ちて、固定された斜面に当たり斜め上にはね返る。斜め台はまったく動かない。</div>
 <div class="bl"><b>＜2 物体の運動量が保存するかの判断理由＞</b>
   内力：斜面に垂直な抗力。外力：重力・<b>ストッパーと床が台を支える力</b>（水平にも鉛直にもはたらく）。
   <b>よってどの方向も運動量は保存しない。</b></div>
 <div class="bl"><b>＜2 物体の力学的エネルギーが保存するかの判断理由＞</b>
-  はたらく力 → 保存力：重力。非保存力：衝突で変形にともなう力（$e\\lt 1$。ストッパーは動かないので仕事はしない）。
-  <b>よって力学的エネルギーは保存しない。</b></div>`
+  はたらく力 → 保存力：重力。非保存力：なし（斜面はなめらかで $e=1$。ストッパーも床も動かないので仕事をしない）。
+  <b>よって力学的エネルギーは保存する。</b></div>`,
 
+5:`<div class="bl"><b>＜慣性系から見た運動の様子＞</b>
+  ひもで結ばれた 2 球が、動かない重心のまわりを向かい合ったまま等速円運動する（軽いほうが大きく回る）。</div>
+<div class="bl"><b>＜2 物体の運動量が保存するかの判断理由＞</b>
+  内力：ひもの張力。外力：重力・垂直抗力（つり合う。床はなめらか）。
+  <b>よって運動量は保存する（$\\vec 0$ のまま＝重心は静止）。</b></div>
+<div class="bl"><b>＜2 物体の力学的エネルギーが保存するかの判断理由＞</b>
+  はたらく力 → 保存力：なし。非保存力：張力（速度に垂直で<b>仕事をしない</b>）。
+  <b>よって力学的エネルギーは保存する（速さが変わらない）。</b></div>`,
+
+6:`<div class="bl"><b>＜慣性系から見た運動の様子＞</b>
+  共通重心上の観測者から見ると、地球と月が動かない重心をはさんで向かい合ったまま等速円運動する（軽い月のほうが大きく回る）。</div>
+<div class="bl"><b>＜2 物体の運動量が保存するかの判断理由＞</b>
+  内力：たがいの万有引力。外力：なし（まわりに他の天体がない）。
+  <b>よって運動量は保存する（$\\vec 0$ のまま）。</b>外力が $0$ なので重心は等速直線運動をし、その上の観測者は<b>慣性系</b>である。</div>
+<div class="bl"><b>＜2 物体の力学的エネルギーが保存するかの判断理由＞</b>
+  はたらく力 → 保存力：万有引力。非保存力：なし。
+  <b>よって力学的エネルギーは保存する（位置エネルギー $-G\\dfrac{mM}{L}$ を含めて一定）。</b></div>`,
+7:`<div class="bl"><b>＜慣性系から見た運動の様子＞</b>
+  地球と月がたがいのまわりを回りながら、2 つそろって太陽のまわりを公転していく。</div>
+<div class="bl"><b>＜2 物体の運動量が保存するかの判断理由＞</b>
+  内力：地球と月の万有引力。外力：<b>太陽からの万有引力</b>。
+  総和 $(m+M)\\vec V_G$ は大きさこそ一定だが公転で<b>向きが変わり続ける</b>。
+  <b>よってどの方向も運動量は保存しない。</b></div>
+<div class="bl"><b>＜2 物体の力学的エネルギーが保存するかの判断理由＞</b>
+  はたらく力 → 保存力：万有引力（太陽からのものも含む）。非保存力：なし。
+  <b>よって力学的エネルギーは保存する。</b></div>`,
+
+8:`<div class="bl"><b>＜慣性系から見た運動の様子＞</b>
+  B を固定したまま A が振り子として振れ下がり、最下点で B をはなすと、2 球はひもで結ばれたまま共通重心のまわりを回りながら、重心は放物運動をする。</div>
+<div class="bl"><b>＜2 物体の運動量が保存するかの判断理由＞</b>
+  内力：ひもの張力。外力：重力（鉛直向き）だけ（$t=0$ で天井からの力はなくなる）。
+  <b>よって水平方向のみ運動量は保存する（$mv_0$ のまま）。</b>（$t=0$ より前は天井からの外力があるので保存しない。）</div>
+<div class="bl"><b>＜2 物体の力学的エネルギーが保存するかの判断理由＞</b>
+  はたらく力 → 保存力：重力。非保存力：なし（伸び縮みしないひもの張力は 2 球にする仕事の和が $0$）。
+  <b>よって力学的エネルギーは保存する。</b></div>`,
+9:`<div class="bl"><b>＜慣性系から見た運動の様子＞</b>
+  静止していた原子核が 2 つに分かれ、$\\alpha$ 粒子と娘核が正反対の向きに飛び出す（重心は動かない）。</div>
+<div class="bl"><b>＜2 物体の運動量が保存するかの判断理由＞</b>
+  内力：核どうしが押し合う力。外力：なし。
+  <b>よって運動量は保存する（$0$ のまま）。</b></div>
+<div class="bl"><b>＜2 物体の力学的エネルギーが保存するかの判断理由＞</b>
+  運動エネルギーが $0$ から増える。増えたぶんは、もとの原子核が $\\alpha$ 粒子＋娘核に変わるときの<b>質量欠損</b>によるエネルギー（$E=\\Delta mc^2$）である。
+  <b>よって力学的エネルギーは保存しない。</b></div>`,
+
+10:`<div class="bl"><b>＜慣性系から見た運動の様子＞</b>
+  波長 $\\lambda$ の X 線が静止した電子に当たり、X 線は角 $\\theta$ に散乱され、電子は反対側の角 $\\varphi$ にはね飛ばされる。</div>
+<div class="bl"><b>＜2 物体の運動量が保存するかの判断理由＞</b>
+  内力：X 線（光子）と電子の相互作用。外力：なし。
+  <b>よって運動量は $x$ 成分も $y$ 成分も保存する（ベクトルとして保存）。</b></div>
+<div class="bl"><b>＜2 物体の力学的エネルギーが保存するかの判断理由＞</b>
+  熱や変形にエネルギーを捨てるしくみがない（弾性衝突と同じ）。
+  <b>よって X 線のエネルギー $hc/\\lambda$ を含めたエネルギーの総和は保存する。</b></div>`
 };
 PROBS.forEach(p=>{ if(BRIEF[p.n]) p.brief=BRIEF[p.n]; });
 </script>

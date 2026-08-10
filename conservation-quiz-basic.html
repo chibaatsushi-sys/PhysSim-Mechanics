@@ -295,6 +295,15 @@ class Painter{
     c.restore();
     c.restore();
   }
+  /* 台車（本体＋車輪 2 つ）  xc=中心, yb=床, w,h=本体の幅・高さ, rw=車輪の半径 */
+  cartW(xc,yb,w,h,rw,fill,stroke,lw){
+    const st=stroke||COL.ink, LW=lw||2.2;
+    this.rectW(xc-w/2, yb+2*rw, w, h, fill||"#fff", st, LW, 3);
+    [xc-w*0.29, xc+w*0.29].forEach(x=>{
+      this.ball(x, yb+rw, rw, "#fff", st, LW*0.8);
+      this.ball(x, yb+rw, rw*0.40, "#fff", st, LW*0.7);
+    });
+  }
   /* 壁（縦のハッチング） */
   wall(x,y0,y1,side){
     const c=this.c; c.save(); c.strokeStyle="#333"; c.lineWidth=2.2;
@@ -862,7 +871,7 @@ class Sim{
     this.gcv=document.createElement("canvas"); gw.appendChild(this.gcv);
     this.gctx=this.gcv.getContext("2d");
     const cap=document.createElement("div"); cap.className="gcap";
-    cap.innerHTML="グラフ（アニメと連動・オレンジの縦線が現在時刻）：左＝運動量（または速度）の <i style=\"font-family:KaTeX_Math,serif\">x</i> 成分、右＝エネルギー。<br><span style=\"font-size:.92em\">エネルギーの<b>合計</b>は「2 物体の力学的エネルギーの総和"+(sc.springE?"（ばねの弾性エネルギーを含む）":"")+"」です。"+(sc.totalOffset===false?"":"線が重なって見えなくなるのを防ぐため、合計（太い黒線）は上に少しずらしています。")+"</span>";
+    cap.innerHTML="グラフ（アニメと連動・オレンジの縦線が現在時刻）：左＝運動量（または速度）の <i style=\"font-family:KaTeX_Math,serif\">x</i> 成分、右＝エネルギー。<br><span style=\"font-size:.92em\">エネルギーの<b>合計</b>は「2 物体の力学的エネルギーの総和"+(sc.springE?"（ばねの弾性エネルギーを含む）":(sc.eNoteG?"（"+sc.eNoteG+"）":""))+"」です。"+(sc.totalOffset===false?"":"線が重なって見えなくなるのを防ぐため、合計（太い黒線）は上に少しずらしています。")+"</span>";
     gw.appendChild(cap);
 
     this.ro=document.createElement("div"); this.ro.className="readout"; h.appendChild(this.ro);
@@ -883,11 +892,11 @@ class Sim{
     const OFF=(sc.totalOffset===false?0:-6);
     this.pSeries.push({label:"合計",col:COL.tot,vals:this.qs.map(q=>q.p.total),thick:true,off:OFF});
     if(q0.p.ylabel) this.pSeries.push({label:q0.p.ylabel,col:"#c0392b",vals:this.qs.map(q=>q.p.ytotal),dash:[5,4]});
-    this.vSeries=q0.p.parts.map((pp,k)=>({label:pp.label,col:pp.col,
+    this.vSeries=q0.p.parts.map((pp,k)=>({label:String(pp.label).split("p_x").join("v_x").split("p_y").join("v_y"),col:pp.col,
       vals:this.qs.map(q=>q.p.parts[k].val/(q.p.parts[k].mass||1))}));
     if(sc.showVG){
       const mtot=q0.p.parts.reduce((a,pp)=>a+(pp.mass||0),0)||1;
-      this.vSeries.push({label:"重心の速度",col:COL.tot,thick:true,
+      this.vSeries.push({label:"重心の速度の x 成分",col:COL.tot,thick:true,
         vals:this.qs.map(q=>q.p.total/mtot)});
     }
     this.eSeries=q0.e.parts.map((pp,k)=>({label:pp.label,col:pp.col,dash:pp.dash,vals:this.qs.map(q=>q.e.parts[k].val)}));
@@ -1970,7 +1979,7 @@ function vennSVG(){
 function buildPage(){
   const wrap=document.getElementById("wrap");
   let h="";
-  h+=`<h1>運動量保存則と力学的エネルギー保存則の適用範囲</h1>`;
+  h+=`<h1>運動量保存則と力学的エネルギー保存則の適用範囲　基本編</h1>`;
   h+=`<div class="card purpose">
     <p class="lead">【目的】</p>
     <p>2 つの保存則は「いつでも使える」わけではない。<b>どんなときに運動量が保存され、どんなときに力学的エネルギーが保存されるのか</b>を、
@@ -1995,7 +2004,7 @@ function buildPage(){
   <p class="howto">問題ごとに ① ② の両方を選ぶと、右側にアニメーションと解説が現れます。</p>`;
 
   const SHORT={1:"弾性衝突",2:"完全非弾性衝突",3:"摩擦のある板の上をすべる小物体",4:"ばね付きの物体の衝突",
-    5:"分裂",6:"2 次元の衝突",7:"自由に動ける斜め台と小物体",8:"固定された斜め台と小物体",
+    5:"分裂　（出題元：センター試験 2016）",6:"2 次元の衝突",7:"自由に動ける斜め台と小物体",8:"固定された斜め台と小物体",
     9:"ばねでつないだ 2 球（同質量）",10:"ばねでつないだ 2 球（質量が違い、片側が先に動き出す）"};
   window.SHORT=SHORT;
   h+=`<div class="tocbox">
@@ -2141,10 +2150,7 @@ function buildPage(){
     else if(sum>=16){ msg.innerHTML='🌸 <b>合格！</b>努力してますね。当たったところも、どうして当たったのか説明できるようになろう'; msg.className="scoremsg pass"; }
     else if(sum>=11){ msg.innerHTML='💪 <b>惜しい！ファイト！</b>当たったところも、どうして当たったのか説明できるようになろう'; msg.className="scoremsg near"; }
     else { msg.innerHTML='📘 <b>解説</b>をしっかり読んで、どういう力がはたらいているのか（内力か外力か・保存力か非保存力か）を考える癖をつけよう。（16 点以上で合格）'; msg.className="scoremsg more"; }
-    if(box.classList.contains("hidden")){
-      box.classList.remove("hidden");
-      setTimeout(()=>box.scrollIntoView({behavior:"smooth",block:"center"}),300);
-    }
+    box.classList.remove("hidden");
   }
   function alignStage(n){
     const host=document.getElementById("stage"+n);
