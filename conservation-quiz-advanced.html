@@ -85,16 +85,52 @@ h2{font-size:1.12rem;margin:0 0 .5em}
 table.ans{border-collapse:collapse;width:100%;margin:.7em 0 .2em;font-size:.94rem}
 table.ans th{border:1px solid #b9c2cc;background:#eef2f6;padding:.45em .5em;font-weight:600;text-align:left;width:50%;line-height:1.45}
 table.ans td{border:1px solid #b9c2cc;padding:.5em .5em;vertical-align:top}
-.opt{display:block;width:100%;text-align:left;margin:.18em 0;padding:.38em .6em;border:1px solid #c3ccd6;background:#fff;
+.opt{display:flex;align-items:center;gap:.45em;width:100%;text-align:left;margin:.18em 0;padding:.38em .6em;border:1px solid #c3ccd6;background:#fff;
      border-radius:8px;cursor:pointer;font:inherit;font-size:.93rem;line-height:1.4;transition:.12s}
-.opt:hover{background:#f0f5fb}
+.opt:not(:disabled):hover{background:#f0f5fb}
+.opt:disabled{cursor:default;opacity:1}
+.opt .otx{flex:1 1 auto}
 .opt.sel{border-color:var(--accent);background:#fff1e0;font-weight:700}
-.opt.right{border-color:var(--ok);background:#e8f7ee}
-.opt.wrong{border-color:var(--ng);background:#fdeceb}
-.opt .mk{float:right;font-weight:700}
+.opt.right{border-color:var(--ok);background:#e8f7ee;color:#14683a;font-weight:700}
+.opt.wrong{border-color:var(--ng);background:#fdeceb;color:#a3342a;font-weight:700}
+.opt.dim{opacity:.45}
+.opt .mk{flex:0 0 auto;font-weight:700;white-space:nowrap}
 .opt.right .mk{color:var(--ok)}
 .opt.wrong .mk{color:var(--ng)}
+/* 「あなたの答え」バッジ */
+.opt .mine{flex:0 0 auto;font-size:.72rem;font-weight:700;letter-spacing:.02em;white-space:nowrap;
+  border-radius:999px;padding:.12em .62em;border:1.5px solid}
+.opt.right .mine{background:#d5efe0;border-color:#5fb886;color:#14683a}
+.opt.wrong .mine{background:#fbd9d4;border-color:#dd8d81;color:#a3342a}
 .judge{margin:.5em 0 0;font-weight:700;min-height:1.75em}
+/* 自分の解答のふりかえり */
+.yours{margin:.5em 0 .1em;display:grid;gap:.32em}
+.yours .row{display:flex;flex-wrap:wrap;align-items:center;gap:.45em .7em;
+  font-size:.9rem;border-radius:9px;padding:.34em .72em;border:1.5px solid}
+.yours .row.ok{background:#eaf7ef;border-color:#8ccdaa;color:#14683a}
+.yours .row.ng{background:#fdeeec;border-color:#e6a79f;color:#a3342a}
+.yours .lb{font-weight:700}
+.yours .va{background:#fff;border:1px solid currentColor;border-radius:999px;padding:.04em .75em;font-weight:700}
+.yours .rs{margin-left:auto;font-weight:700;white-space:nowrap}
+/* ---- 正解の演出 ---- */
+@keyframes optPop{0%{transform:scale(1)}30%{transform:scale(1.11)}58%{transform:scale(.985)}100%{transform:scale(1)}}
+@keyframes okGlow{0%{box-shadow:0 0 0 0 rgba(28,143,74,.50)}70%{box-shadow:0 0 0 13px rgba(28,143,74,0)}100%{box-shadow:0 0 0 0 rgba(28,143,74,0)}}
+@keyframes mkPop{0%{transform:scale(.35) rotate(-12deg);opacity:0}55%{transform:scale(1.3) rotate(4deg);opacity:1}100%{transform:scale(1) rotate(0);opacity:1}}
+@keyframes judgePop{0%{transform:scale(.82);opacity:0}55%{transform:scale(1.07);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes ptPop{0%{transform:scale(.4);opacity:0}55%{transform:scale(1.22);opacity:1}100%{transform:scale(1);opacity:1}}
+.opt.right{animation:optPop .52s cubic-bezier(.2,.8,.3,1.35) both, okGlow .95s ease-out both}
+.opt.right .mk{animation:mkPop .5s .10s cubic-bezier(.2,.8,.3,1.6) both}
+.opt .mine{animation:mkPop .45s .06s cubic-bezier(.2,.8,.3,1.55) both}
+.judge>span{display:inline-block;animation:judgePop .45s cubic-bezier(.2,.8,.3,1.4) both}
+.judge>span+span{animation-delay:.16s}
+.judge .g{font-size:1.04em}
+.yours .row{animation:judgePop .42s .22s cubic-bezier(.2,.8,.3,1.35) both}
+.yours .row+.row{animation-delay:.32s}
+.qpt{animation:ptPop .5s .18s cubic-bezier(.2,.8,.3,1.5) both}
+@media (prefers-reduced-motion: reduce){
+  .opt.right,.opt.right .mk,.opt .mine,.judge>span,.yours .row,.qpt{animation:none !important}
+}
+
 .judge .g{color:var(--ok)} .judge .b{color:var(--ng)}
 .reveal{margin-top:.5em;font-size:.9rem;color:var(--sub);background:none;border:1px dashed #c3ccd6;border-radius:8px;padding:.35em .8em;cursor:pointer;font-family:inherit}
 
@@ -871,7 +907,7 @@ class Sim{
     this.gcv=document.createElement("canvas"); gw.appendChild(this.gcv);
     this.gctx=this.gcv.getContext("2d");
     const cap=document.createElement("div"); cap.className="gcap";
-    cap.innerHTML="グラフ（アニメと連動・オレンジの縦線が現在時刻）：左＝運動量（または速度）の <i style=\"font-family:KaTeX_Math,serif\">x</i> 成分、右＝エネルギー。<br><span style=\"font-size:.92em\">エネルギーの<b>合計</b>は「2 物体の力学的エネルギーの総和"+(sc.springE?"（ばねの弾性エネルギーを含む）":(sc.eNoteG?"（"+sc.eNoteG+"）":""))+"」です。"+(sc.totalOffset===false?"":"線が重なって見えなくなるのを防ぐため、合計（太い黒線）は上に少しずらしています。")+"</span>";
+    cap.innerHTML="グラフ（アニメと連動・オレンジの縦線が現在時刻）：左＝運動量（または速度）の <i style=\"font-family:KaTeX_Math,serif\">"+(sc.comp||"x")+"</i> 成分、右＝エネルギー。<br><span style=\"font-size:.92em\">エネルギーの<b>合計</b>は「"+(sc.one?"小球の力学的エネルギー":"2 物体の力学的エネルギーの総和")+""+(sc.springE?"（ばねの弾性エネルギーを含む）":(sc.eNoteG?"（"+sc.eNoteG+"）":""))+"」です。"+(sc.totalOffset===false?"":"線が重なって見えなくなるのを防ぐため、合計（太い黒線）は上に少しずらしています。")+"</span>";
     gw.appendChild(cap);
 
     this.ro=document.createElement("div"); this.ro.className="readout"; h.appendChild(this.ro);
@@ -2263,8 +2299,8 @@ function buildPage(){
     <b>基礎編のページ</b>で身につけた「内力か外力か」「保存力か非保存力か」の判断を、
     <b>台車の中の振動・壁とつながれたばね・斜めの衝突・円運動・天体・原子核</b>といった、
     ひとひねりある場面に広げていく。</p>
-    <p>難関大の問題では、<b>どこまでを「系」とみなすか</b>が重要である。
-    2 つの保存則がそれぞれ成り立つかどうかを、力の図をかいて自分で判断できるようになることが目的である。</p>
+    <p><b>どこまでを「系」とみなすか</b>が重要。
+    2 つの保存則がそれぞれ成り立つかどうかを、力の図をかいて自分で判断できるようになることが、このページの目的である。</p>
   </div>`;
 
   h+=`<div id="venn" class="card">
@@ -2308,6 +2344,7 @@ function buildPage(){
           </tr>
         </table>
         <div class="judge" id="judge${p.n}"></div>
+        <div class="yours" id="yours${p.n}"></div>
         <div class="stagehost hidden" id="stage${p.n}"></div>
       </div>
       <div class="qR folded" id="right${p.n}">
@@ -2383,14 +2420,28 @@ function buildPage(){
     document.querySelectorAll('.opt[data-q="'+n+'"]').forEach(o=>{
       const c=o.dataset.c,k=o.dataset.k;
       o.classList.remove("sel");
-      if(k===prob.ans[c]){ o.classList.add("right"); o.innerHTML=OPT[k]+'<span class="mk">○ 正解</span>'; }
-      else if(st[c]===k){ o.classList.add("wrong"); o.innerHTML=OPT[k]+'<span class="mk">× </span>'; }
-      o.disabled=true;
+      const mine=(st[c]===k), right=(k===prob.ans[c]);
+      let h='<span class="otx">'+OPT[k]+'</span>';
+      if(mine) h+='<span class="mine">'+(right?"\u2714":"\u2716")+' あなたの答え</span>';
+      if(right){ o.classList.add("right"); h+='<span class="mk">\u25cb 正解</span>'; }
+      else if(mine){ o.classList.add("wrong"); h+='<span class="mk">\u00d7 不正解</span>'; }
+      else o.classList.add("dim");
+      o.innerHTML=h; o.disabled=true;
     });
     const okP=st.p===prob.ans.p, okE=st.e===prob.ans.e;
     const j=document.getElementById("judge"+n);
-    j.innerHTML=(okP&&okE)?'<span class="g">◎ 両方とも正解！</span>'
-      :((okP||okE)?'<span class="b">△ どちらか一方が違います。</span>':'<span class="b">× もう一度、解説を読んでみよう。</span>');
+    const nmP=(prob.one?"① 小球の運動量":"① 運動量"), nmE=(prob.one?"② 小球の力学的エネルギー":"② 力学的エネルギー");
+    let jm;
+    if(okP&&okE)   jm='<span class="g">🎉 両方とも正解！すばらしい！</span>';
+    else if(okP)   jm='<span class="g">◯ '+nmP+' は正解！</span><span class="b">　ですが '+nmE+' が違います</span>';
+    else if(okE)   jm='<span class="g">◯ '+nmE+' は正解！</span><span class="b">　ですが '+nmP+' が違います</span>';
+    else           jm='<span class="b">× 両方とも違います。解説をじっくり読んでみよう。</span>';
+    j.innerHTML=jm;
+    const yr=(lab,ch,an,ok)=>'<div class="row '+(ok?"ok":"ng")+'"><span class="lb">'+lab+'</span>'
+      +'<span class="va">あなたの答え：'+OPT[ch]+'</span>'
+      +'<span class="rs">'+(ok?"\u25cb 正解":"\u2716 不正解　正解は「"+OPT[an]+"」")+'</span></div>';
+    const ye=document.getElementById("yours"+n);
+    if(ye) ye.innerHTML=yr(nmP,st.p,prob.ans.p,okP)+yr(nmE,st.e,prob.ans.e,okE);
     st.okP=okP; st.okE=okE;
     const pt=(okP?1:0)+(okE?1:0);
     const pe=document.getElementById("qpt"+n);
@@ -2832,7 +2883,7 @@ PROBS.push(
     <p>まわりに他の物体はなく、重力の影響は無視できるものとする。</p>`,
   ab:"<span>(a) 崩壊前</span><span>(b) 崩壊後</span><span style='margin-right:0'>を比べたとき、</span>",
   ans:{p:"yes", e:"no"},
-  opts:{p:["yes","hx","no"], e:["yes","no"]},
+  opts:{p:["yes","no"], e:["yes","no"]},
   exp:`
     <h3>① 運動量の総和 … <span style="color:#1c8f4a">保存される</span></h3>
     <p>核が 2 つに分かれるときに押し合う力は、$\\alpha$ 粒子と娘核の間ではたらく<b>内力</b>である。
