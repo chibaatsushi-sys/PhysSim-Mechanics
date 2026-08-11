@@ -294,6 +294,11 @@ const COL = {
   iB:"#8e2fd0"            // B が受ける内力（青寄りのマゼンタ）
 };
 
+/* 同じ大きさのしるし（合同記号）をまとめるグループ：
+   矢印の色が違っても、同じ種類の量どうしなら比べる */
+const TICKG = {};
+TICKG[COL.iA]="inner"; TICKG[COL.iB]="inner"; TICKG[COL.inner]="inner";
+
 function clamp(a,b,c){return a<b?b:(a>c?c:a);}
 function fmt(x,n){ if(!isFinite(x)) x=0; let s=x.toFixed(n); if(s==="-"+(0).toFixed(n)) s=(0).toFixed(n); return s; }
 function lerp(a,b,t){return a+(b-a)*t;}
@@ -401,12 +406,12 @@ class Painter{
     c.stroke(); c.restore();
   }
   /* 矢印（world座標の始点 + px 単位のベクトル） */
-  arrowPx(x,y,dxPx,dyPx,col,lw,head){
+  arrowPx(x,y,dxPx,dyPx,col,lw,head,tg){
     dxPx*=this.k; dyPx*=this.k;
     const c=this.c, X=this.X(x), Y=this.Y(y), X2=X+dxPx, Y2=Y+dyPx;
     const len=Math.hypot(dxPx,dyPx); if(len<0.7) return [X2,Y2];
     const h=Math.min(head||11, len*0.5), ux=dxPx/len, uy=dyPx/len, px=-uy, py=ux;
-    this._rec(X,Y,X2,Y2,len,col,h);
+    this._rec(X,Y,X2,Y2,len,col,h,tg);
     c.save(); c.strokeStyle=col; c.fillStyle=col; c.lineWidth=lw||2.2; c.lineCap="round";
     c.beginPath(); c.moveTo(X,Y); c.lineTo(X2-ux*h*0.75,Y2-uy*h*0.75); c.stroke();
     c.beginPath(); c.moveTo(X2,Y2); c.lineTo(X2-ux*h+px*h*0.52, Y2-uy*h+py*h*0.52);
@@ -414,12 +419,12 @@ class Painter{
     return [X2,Y2];
   }
   /* 生ピクセル座標の矢印 */
-  arrowRaw(X,Y,dxPx,dyPx,col,lw,head){
+  arrowRaw(X,Y,dxPx,dyPx,col,lw,head,tg){
     dxPx*=this.k; dyPx*=this.k;
     const c=this.c, X2=X+dxPx, Y2=Y+dyPx, len=Math.hypot(dxPx,dyPx);
     if(len<0.7) return;
     const h=Math.min(head||11,len*0.5), ux=dxPx/len, uy=dyPx/len, px=-uy, py=ux;
-    this._rec(X,Y,X2,Y2,len,col,h);
+    this._rec(X,Y,X2,Y2,len,col,h,tg);
     c.save(); c.strokeStyle=col; c.fillStyle=col; c.lineWidth=lw||2.2; c.lineCap="round";
     c.beginPath(); c.moveTo(X,Y); c.lineTo(X2-ux*h*0.75,Y2-uy*h*0.75); c.stroke();
     c.beginPath(); c.moveTo(X2,Y2); c.lineTo(X2-ux*h+px*h*0.52,Y2-uy*h+py*h*0.52);
@@ -429,7 +434,7 @@ class Painter{
   vec(x,y,dxPx,dyPx,col,label,opt){
     opt=opt||{};
     this._skipTick=!!opt.noTick;
-    const [X2,Y2]=this.arrowPx(x,y,dxPx,dyPx,col,opt.lw,opt.head);
+    const [X2,Y2]=this.arrowPx(x,y,dxPx,dyPx,col,opt.lw,opt.head,opt.tick);
     this._skipTick=false;
     dxPx*=this.k; dyPx*=this.k;
     if(label && Math.hypot(dxPx,dyPx)>3){
@@ -446,26 +451,26 @@ class Painter{
     while(i<str.length){
       const ch=str[i];
       if(ch==="@"){ i++; const q=str[i++]||""; toks.push({t:q,sub:false,vec:true}); continue; }
-      if(ch==="_"){ i++; let sub="";
+      if(ch==="_"||ch==="^"){ const up=(ch==="^"); i++; let sub="";
         if(str[i]==="{"){ i++; while(i<str.length&&str[i]!=="}"){sub+=str[i++];} i++; } else { sub=str[i++]||""; }
-        for(const q of sub) toks.push({t:q,sub:true});
-      } else { toks.push({t:ch,sub:false}); i++; }
+        for(const q of sub) toks.push({t:q,sub:!up,sup:up});
+      } else { toks.push({t:ch,sub:false,sup:false}); i++; }
     }
-    const runs=[]; let cur="",curIt=null,curSub=null,curVec=null;
+    const runs=[]; let cur="",curIt=null,curSub=null,curSup=null,curVec=null;
     const isIt=(ch)=>/[A-Za-z\u03b1-\u03c9\u0391-\u03a9]/.test(ch);
     toks.forEach(tk=>{
-      const it=isIt(tk.t), vc=!!tk.vec;
-      if(curIt===null||(it===curIt&&tk.sub===curSub&&!vc&&!curVec)){ cur+=tk.t; curIt=it; curSub=tk.sub; curVec=vc; }
-      else { if(cur!=="") runs.push({t:cur,it:curIt,sub:curSub,vec:curVec});
-             cur=tk.t; curIt=it; curSub=tk.sub; curVec=vc; }
+      const it=isIt(tk.t), vc=!!tk.vec, sp=!!tk.sup;
+      if(curIt===null||(it===curIt&&tk.sub===curSub&&sp===curSup&&!vc&&!curVec)){ cur+=tk.t; curIt=it; curSub=tk.sub; curSup=sp; curVec=vc; }
+      else { if(cur!=="") runs.push({t:cur,it:curIt,sub:curSub,sup:curSup,vec:curVec});
+             cur=tk.t; curIt=it; curSub=tk.sub; curSup=sp; curVec=vc; }
     });
-    if(cur!=="") runs.push({t:cur,it:curIt,sub:curSub,vec:curVec});
-    const fontOf=(r)=>{ const sz=(r.sub? size*0.72 : size);
+    if(cur!=="") runs.push({t:cur,it:curIt,sub:curSub,sup:curSup,vec:curVec});
+    const fontOf=(r)=>{ const sz=((r.sub||r.sup)? size*0.72 : size);
       return r.it ? ('italic '+sz+'px KaTeX_Math, "Times New Roman", serif')
                   : (sz+'px KaTeX_Main, "Times New Roman", serif'); };
     let w=0; runs.forEach(r=>{ c.font=fontOf(r); r.w=c.measureText(r.t).width; w+=r.w; });
     let X=Xpx; if(o.align==="center") X-=w/2; else if(o.align==="right") X-=w;
-    runs.forEach(r=>{ c.font=fontOf(r); c.fillText(r.t, X, Ypx+(r.sub? size*0.28:0));
+    runs.forEach(r=>{ c.font=fontOf(r); c.fillText(r.t, X, Ypx+(r.sub? size*0.28:(r.sup? -size*0.36:0)));
       if(r.vec){                                   // ベクトル記号（上向き矢印）
         const y=Ypx-size*0.64, x1=X+size*0.12, x2=X+r.w+size*0.18, hh=size*0.17;
         c.save(); c.strokeStyle=c.fillStyle; c.lineWidth=Math.max(1, size*0.075); c.lineCap="round";
@@ -518,9 +523,9 @@ class Painter{
   }
   /* ---- 「同じ大きさ」のしるし（幾何の合同記号と同じ考え方） ---- */
   ticksOn(){ this._recs=[]; }
-  _rec(X,Y,X2,Y2,len,col,head){
+  _rec(X,Y,X2,Y2,len,col,head,tg){
     if(!this._recs || this._skipTick) return;
-    this._recs.push({X,Y,X2,Y2,len,col,head:head||0});
+    this._recs.push({X,Y,X2,Y2,len,col,head:head||0, g:(tg||TICKG[col]||col)});
   }
   ticksDraw(){
     const rs=this._recs; this._recs=null;
@@ -532,12 +537,12 @@ class Painter{
       const grp=[i];
       for(let j=i+1;j<rs.length;j++){
         if(used[j]||rs[j].len<8) continue;
-        if(rs[j].col!==rs[i].col) continue;                    // 同じ色（＝同じ種類）どうしだけ比べる
+        if(rs[j].g!==rs[i].g) continue;                        // 同じ種類（速度どうし・内力どうし…）だけ比べる
         const a=rs[i].len, b=rs[j].len;
         if(Math.abs(a-b) <= 0.045*Math.max(a,b)+1.2) grp.push(j);
       }
       if(grp.length<2) continue;
-      const col=rs[i].col;
+      const col=rs[i].g;
       const n=Math.min(3,(gcnt[col]=(gcnt[col]||0)+1));
       grp.forEach(j=>{ used[j]=n; });
     }
@@ -1203,13 +1208,13 @@ function MV(a,b){ return '<i style="font-family:KaTeX_Math,serif">'+a+'</i>'+(b?
 function vArrow(P,cx,ytop,v,VSC,lab,col,dy,labMid){
   if(Math.abs(v)*VSC<4) return;
   const dx=v*VSC, x0=cx-(dx/2)/P.s;
-  P.vec(x0, ytop, dx, dy||0, col||COL.v, labMid?null:lab, {off:12,lw:2.2});
+  P.vec(x0, ytop, dx, dy||0, col||COL.v, labMid?null:lab, {off:12,lw:2.2,tick:"vel"});
   if(labMid&&lab) P.mtextW(cx, ytop+0.26, lab, {size:14, align:"center", col:col||COL.v});
 }
 function vArrow2(P,cx,cy,vx,vy,VSC,lab,col){
   const dx=vx*VSC, dy=-vy*VSC;
   if(Math.hypot(dx,dy)<4) return;
-  P.vec(cx, cy, dx, dy, col||COL.v, lab, {off:12,lw:2.2});
+  P.vec(cx, cy, dx, dy, col||COL.v, lab, {off:12,lw:2.2,tick:"vel"});
 }
 function fLen(F,FSC){ return Math.max(18, Math.min(56, F*FSC)); }
 function fClip(F,FSC){ const v=F*FSC; return v<18-1e-9 || v>56+1e-9; }
@@ -1494,9 +1499,9 @@ function SC13(){
       { const VS=17, dx=vbx*VS, dy=-s.vby*VS, len=Math.hypot(dx,dy);
         if(len>5){
           if(s.ph<=0){ const y1=s.by+r+len/P.s;
-            P.arrowPx(bx,y1,0,len,COL.A,2.6,13);
+            P.arrowPx(bx,y1,0,len,COL.A,2.6,13,"vel");
             P.mtextW(bx-0.28,y1-0.10,"v_0",{col:COL.A,size:14,align:"center"});
-          } else P.vec(bx,s.by,dx,dy,COL.A,"v'",{off:12,lw:2.6,head:13});
+          } else P.vec(bx,s.by,dx,dy,COL.A,"v'",{off:12,lw:2.6,head:13,tick:"vel"});
         } }
       vArrow(P,Xw+bs+0.58,h*0.55,VX,26,"V",COL.B,0,true);
       if(!o.figure && !o.snap){
@@ -1606,9 +1611,9 @@ function SC14(){
       { const VS=17, dx=vbx*VS, dy=-s.vby*VS, len=Math.hypot(dx,dy);
         if(len>5){
           if(s.ph<=0){ const y1=s.by+r+len/P.s;
-            P.arrowPx(bx,y1,0,len,COL.A,2.6,13);
+            P.arrowPx(bx,y1,0,len,COL.A,2.6,13,"vel");
             P.mtextW(bx-0.28,y1-0.10,"v_0",{col:COL.A,size:14,align:"center"});
-          } else P.vec(bx,s.by,dx,dy,COL.A,"v'",{off:12,lw:2.6,head:13});
+          } else P.vec(bx,s.by,dx,dy,COL.A,"v'",{off:12,lw:2.6,head:13,tick:"vel"});
         } }
       if(!o.figure && !o.snap){
         const xg=XG-DX14;
@@ -2361,15 +2366,15 @@ function buildPage(){
 
   h+=`<div class="instr">
     <p class="lead">【問題】</p>
-    <p style="margin:.2em 0 .3em">次の問題では、次の 2 つの量は (a) (b) を比較してどうなるか。保存するか、保存しないかで答えよ。</p>
+    <p style="margin:.2em 0 .3em">次の問題では、次の 2 つの量は (a) (b) を比較してどうなるか。保存するか、保存しないかで答えよ。　どの問題も空気抵抗は無視し、物体は全て質点とみなす。</p>
     <p style="margin:.2em 0 0;padding-left:.6em">
       <b>①</b> 2 物体の運動量の総和　　　　<b>②</b> 2 物体の力学的エネルギーの総和</p>
   </div>
   <p class="howto">問題ごとに ① ② の両方を選ぶと、右側にアニメーションと解説が現れます。</p>`;
 
-  const SHORT={1:"ばね付き台車の上の小球　（出題元：京大 2014）",2:"ばねにつながった物体との弾性衝突",3:"自由に動ける斜め台への衝突",
-    4:"固定された斜め台への衝突",5:"ひもで結ばれた 2 物体の等速円運動",6:"共通重心の周りをまわる地球と月",
-    7:"太陽の周りをまわる地球と月",8:"ひもで結ばれた 2 小球をはなす　（出題元：東大 2015）",9:"原子核崩壊（α 崩壊）",10:"コンプトン効果（X 線と電子）"};
+  const SHORT={1:"ばね付き台車の上の小球　（出題元：京大 2014）",2:"ばねにつながった物体との弾性衝突",3:"斜め台に衝突する物体（固定なし）",
+    4:"斜め台に衝突する物体（固定あり）",5:"ひもで結ばれた 2 物体の等速円運動",6:"地球と月（共通重心の周りをまわる）",
+    7:"地球と月（太陽の周りをまわる）",8:"ひもで結ばれた 2 球の水平投射　（出題元：東大 2015）",9:"原子核崩壊（α 崩壊）",10:"コンプトン効果（X 線と電子）"};
   window.SHORT=SHORT;
   h+=`<div class="tocbox">
     <div class="toclabel">■ 目次</div>
@@ -2905,8 +2910,7 @@ PROBS.push(
   stmt:`
     <p>質量 $m$ の小球 A、B が、長さ $l$ の軽いひもの両端につながれている。
     図のように水平な天井に、小球 A、B を $l$ だけ離して固定した（ひもはぴんと張っている）。
-    小球 B を固定した点を O とし、重力加速度の大きさを $g$ とする。
-    小球の大きさ、ひもの質量、空気抵抗は無視できるものとする。</p>
+    小球 B を固定した点を O とする。ひもの質量は無視できるものとする。</p>
     <p>まず、<b>小球 B を固定したまま小球 A を静かにはなす</b>。
     小球 A が初めて最下点（$\\theta=\\dfrac{\\pi}{2}$）に達したときに、<b>小球 B を静かにはなした</b>。
     この時刻を $t=0$ とする。</p>`,
