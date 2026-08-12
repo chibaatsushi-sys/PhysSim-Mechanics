@@ -2016,7 +2016,7 @@ function SC11(){
   const st=(t)=>({ y:y0-0.5*G*t*t, v:-G*t });
   return {
     id:"q11", allF:true, world:{x0:2.55,x1:6.65,y0:-0.55,y1:5.20}, minPxPerM:54, maxH:398, tEnd,
-    figWorld:{x0:2.70,x1:6.50,y0:2.30,y1:4.95}, figH:183, figZoom:1.8,
+    figWorld:{x0:-1.08,x1:9.47,y0:1.35,y1:4.95}, figH:900, figZoom:1, figNoCrop:true,
     comp:"y", totalOffset:false,
     assume:'数値は $m=1.0$ kg、$M=3.0$ kg、落とす高さ 3.0 m として計算。空気の抵抗はない。',
     slowmo:{label:'放した瞬間', t0:0, t1:0.25, k:0.12},
@@ -2889,6 +2889,7 @@ function drawStatic(cv, sc){
 
   const IW=off.width, IH=off.height;
   let dat; try{ dat=oc.getImageData(0,0,IW,IH).data; }catch(e){ dat=null; }
+  if(sc.figNoCrop) dat=null;          /* 余白ごと使う図（切り取らない） */
   let x0=0,y0=0,x1=IW-1,y1=IH-1, bands=[];
   if(dat){
     const rowInk=new Uint8Array(IH), colInk=new Uint8Array(IW);
