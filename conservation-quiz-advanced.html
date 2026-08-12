@@ -272,7 +272,9 @@ footer{color:var(--sub);font-size:.85rem;text-align:center;margin-top:30px}
   border:1px solid #c3ccd6;background:#fff;color:var(--sub);cursor:pointer}
 .cmtab:hover,.cmplay:hover{background:#f2f5f9}
 .cmtab.on{background:var(--accent2);border-color:var(--accent2);color:#fff}
-.cmplay{margin-left:auto;font-weight:600}
+.cmplay{font-weight:600}
+#cmlabslow{margin-left:auto}
+.cmplay.on{background:#fff1e0;border-color:var(--accent);color:#8a5a12}
 .cmwrap{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff;max-width:620px;margin:0 auto;display:flex;justify-content:center}
 .cmwrap canvas{display:block;width:100%}
 .cmnote{margin-top:.5em;font-size:.9rem;color:var(--sub);line-height:1.65;min-height:3em}
@@ -2562,9 +2564,10 @@ function buildPage(){
     <div class="cmlab" id="cmlab">
       <div class="cmhd">◎ 重心ミニ実験室　― 3 つの場面を見くらべよう ―</div>
       <div class="cmtabs">
-        <button class="cmtab on" data-m="A">① 投げたスパナ</button>
-        <button class="cmtab" data-m="B">② 跳ぶ人</button>
+        <button class="cmtab on" data-m="A">① 投げたトンカチ</button>
+        <button class="cmtab" data-m="B">② 背面跳び</button>
         <button class="cmtab" data-m="C">③ 宇宙機の姿勢制御</button>
+        <button class="cmplay" id="cmlabslow">🐢 スロー</button>
         <button class="cmplay" id="cmlabplay">■ 一時停止</button>
       </div>
       <div class="cmwrap"><canvas id="cmlabcv"></canvas></div>
@@ -2884,6 +2887,7 @@ function drawStatic(cv, sc){
 
   const IW=off.width, IH=off.height;
   let dat; try{ dat=oc.getImageData(0,0,IW,IH).data; }catch(e){ dat=null; }
+  if(sc.figNoCrop) dat=null;          /* 余白ごと使う図（切り取らない） */
   let x0=0,y0=0,x1=IW-1,y1=IH-1, bands=[];
   if(dat){
     const rowInk=new Uint8Array(IH), colInk=new Uint8Array(IW);
@@ -3449,17 +3453,18 @@ PROBS.forEach(p=>{ if(BRIEF[p.n]) p.brief=BRIEF[p.n]; });
    難関大受験編 Part 6 : 上級者向け解説の「重心ミニ実験室」アニメーション
    ------------------------------------------------------------------------
    3 つの場面を切りかえて見せる。すべて自作の図（外部画像は使わない）。
-     A 投げたスパナ   … 回転していても重心だけは放物線
-     B 跳ぶ人         … 空中で手足をどう動かしても重心の軌道は変わらない
+     A 投げたトンカチ … 回転していても重心だけは放物線
+     B 背面跳び       … 体はバーの上、重心はバーの下を通る
      C 宇宙機の姿勢制御 … 外力ゼロなら重心は動かないまま、向きだけ変えられる
    ========================================================================= */
 (function(){
 
 const LAB = {
-  A:{ name:"投げたスパナ", note:"回転しながら飛んでも、重心（◎）だけはきれいな放物線をえがく。"
-      +"軽い方の球（小さい赤）の軌跡はぐにゃぐにゃなのに、重心の軌跡はなめらか。" },
-  B:{ name:"跳ぶ人", note:"空中で手足をどう動かしても、重心（◎）の軌道は放物線のまま変えられない。"
-      +"背面跳びやスポーツの動作解析は、この事実が出発点になっている。" },
+  A:{ name:"投げたトンカチ", note:"トンカチを回転させながら投げても、重心（◎）だけはきれいな放物線をえがく。"
+      +"柄の先（軽い方・小さい赤）の軌跡はぐにゃぐにゃなのに、重心の軌跡はなめらか。"
+      +"重心は、重い頭のすぐ近くにある。" },
+  B:{ name:"背面跳び", note:"空中では重心（◎）の放物線を変えられない。だから記録をのばすには、"
+      +"体をそらせて「重心を体の外に出す」しかない。背面跳びでは、重心がバーの下を通りながら体だけがバーをこえていく。" },
   C:{ name:"宇宙機の姿勢制御", note:"外力がないので重心（◎）は動かない。"
       +"それでも内部のはずみ車を回せば、機体の向きだけを変えられる。探査機や人工衛星が実際に使う方法。" }
 };
@@ -3536,37 +3541,103 @@ function draw(cv, mode, t){
     }
     trace(ta,"#d7dee6",1.6);
     trace(tr,green,2,[6,5]);
-    seg(ax,ay,bx,by,"#6b7683",4);
-    dot(bx,by,rr1,"#dbe6f6",blue,2.6); label(bx,by,"3m",blue,12);
-    dot(ax,ay,rr2,"#fbe3e0",red,2.4);  label(ax,ay-rr2-9,"m",red,12);
+    /* --- トンカチのイラスト（柄＝軽い側 a、頭＝重い側 b） --- */
+    const ux=(ax-bx), uy=(ay-by), ul=Math.hypot(ux,uy)||1;   /* 頭 → 柄の先 の向き */
+    const dx2=ux/ul, dy2=uy/ul, nx=-dy2, ny=dx2;             /* 柄の方向と、それに垂直な向き */
+    const hw=L*0.155, hh=L*0.115;                            /* 頭の 長さ(横) と 厚み */
+    c.save();
+    /* 柄（木の色） */
+    c.beginPath();
+    c.moveTo(bx+nx*L*0.026, by+ny*L*0.026); c.lineTo(ax+nx*L*0.020, ay+ny*L*0.020);
+    c.lineTo(ax-nx*L*0.020, ay-ny*L*0.020); c.lineTo(bx-nx*L*0.026, by-ny*L*0.026);
+    c.closePath(); c.fillStyle="#c08a4a"; c.fill();
+    c.strokeStyle="#8a5f2c"; c.lineWidth=1.4; c.stroke();
+    /* 頭（金属）：柄に垂直な角ばったブロック */
+    c.translate(bx,by); c.rotate(Math.atan2(dy2,dx2));
+    c.beginPath(); c.rect(-hh*0.55, -hw, hh*1.35, hw*2);
+    c.fillStyle="#8d99a6"; c.fill(); c.strokeStyle="#48525d"; c.lineWidth=2; c.stroke();
+    c.beginPath(); c.rect(-hh*0.95, -hw*0.78, hh*0.42, hw*1.56);   /* 打つ面 */
+    c.fillStyle="#6f7b88"; c.fill(); c.strokeStyle="#48525d"; c.lineWidth=1.8; c.stroke();
+    c.restore();
+
+    /* --- 2 球のモデル（うすく重ねる） --- */
+    c.save(); c.globalAlpha=0.55;
+    dot(bx,by,rr1,"#dbe6f6",blue,2.6);
+    dot(ax,ay,rr2,"#fbe3e0",red,2.4);
+    c.restore();
+    label(bx,by,"3m",blue,12);
+    label(ax,ay-rr2-9,"m",red,12);
     cmMark(cx,cy);
   }
 
   if(mode==="B"){
     ground(gy+6);
+    const sc=Math.max(0.75, W/620);
     const u=t%1, cx=px(u), cy=py(u);
+    const bxx=px(0.50), yBar=top-16*sc;          /* バーは重心の最高点より少し上 */
+
+    /* --- バーと支柱（走り高跳び） --- */
+    const half=Math.min(112*sc, (x1-x0)*0.30);
+    seg(bxx-half, gy+6, bxx-half, yBar-16*sc, "#9aa4b0", 4);
+    seg(bxx+half, gy+6, bxx+half, yBar-16*sc, "#9aa4b0", 4);
+    seg(bxx-half-6, yBar, bxx+half+6, yBar, "#e07b18", 4.5);
+    label(bxx+half+10, yBar-12*sc, "バー", "#c2700f", 11.5, "left");
+    c.save(); c.setLineDash([5,4]); c.strokeStyle="#8ccdaa"; c.lineWidth=1.4;
+    c.beginPath(); c.moveTo(bxx-half-6, top); c.lineTo(bxx+half+6, top); c.stroke(); c.restore();
+    label(bxx-half-12, top, "重心の最高点", green, 11, "right");
+
     const tr=[]; for(let k=0;k<=140;k++){ const uu=u*k/140; tr.push([px(uu),py(uu)]); }
     trace(tr,green,2,[6,5]);
-    /* 重心を基準にして人のかたちを組み立てる（手足は大きく動く） */
-    const sc=Math.max(0.75, W/620), ph=t*8.0, a=Math.sin(ph);
-    const hx=cx, hy=cy+14*sc;                       /* こし */
-    const sx=cx+4*sc*a, sy=cy-18*sc;                /* かた */
-    seg(hx,hy,sx,sy,ink,5.2);                       /* 胴 */
-    seg(sx,sy, sx+7*sc*a, sy-13*sc, ink,4.6);       /* 首 */
-    dot(sx+9*sc*a, sy-22*sc, 8.5*sc,"#fff",ink,2.8);/* 頭 */
-    const limb=(x,y,a1,a2,l1,l2,col,w)=>{
-      const ex=x+l1*sc*Math.cos(a1), ey=y+l1*sc*Math.sin(a1);
-      const fx=ex+l2*sc*Math.cos(a2), fy=ey+l2*sc*Math.sin(a2);
-      seg(x,y,ex,ey,col,w); seg(ex,ey,fx,fy,col,w*0.88);
-    };
-    /* うで（左右で位相をずらして大きく振る） */
-    limb(sx,sy, -2.5+0.85*a, -2.1+1.1*a, 21, 19, red, 3.6);
-    limb(sx,sy, -0.7-0.85*a, -0.3-1.1*a, 21, 19, red, 3.6);
-    /* あし */
-    limb(hx,hy, 1.15+0.55*a, 1.45+0.75*a, 25, 23, blue, 4.2);
-    limb(hx,hy, 1.95-0.55*a, 1.65-0.75*a, 25, 23, blue, 4.2);
+
+    /* --- 選手のかたちを組み立てる（局所座標） --- */
+    const KEY=[[0.00,95,112],[0.30,145,168],[0.50,192,242],[0.64,230,288],[0.80,252,302],[1.00,264,306]];
+    const key=(i)=>{ let a=KEY[0], b=KEY[KEY.length-1];
+      for(let k=0;k<KEY.length-1;k++){ if(u>=KEY[k][0]&&u<=KEY[k+1][0]){ a=KEY[k]; b=KEY[k+1]; break; } }
+      const r=(b[0]===a[0])?0:(u-a[0])/(b[0]-a[0]);
+      return (a[i]+(b[i]-a[i])*r)*Math.PI/180; };
+    const aTh=key(1), aSh=key(2);                       /* もも・すねの向き（画面基準） */
+    const al=0.28+1.70*Math.exp(-Math.pow((u-0.48)/0.20,2));   /* そりの深さ */
+    const psi=(-80+98*u)*Math.PI/180;
+    const Lb=0.17*W, R=Lb/(2*al);
+    const rot=(x,y)=>[x*Math.cos(psi)-y*Math.sin(psi), x*Math.sin(psi)+y*Math.cos(psi)];
+    const tor=(phi)=>rot(R*Math.sin(phi), -R*Math.cos(phi));
+
+    const TOR=[]; for(let k=0;k<=24;k++) TOR.push(tor(-al+2*al*k/24));
+    const hipE=tor(-al), headE=tor(al), shE=tor(0.55*al), armE=tor(0.80*al);
+    const hv=[headE[0]-armE[0], headE[1]-armE[1]], hl=Math.hypot(hv[0],hv[1])||1;
+    const head=[headE[0]+hv[0]/hl*11*sc, headE[1]+hv[1]/hl*11*sc];
+    const ch=(x,y,a1,a2,l1,l2)=>{ const e=[x+l1*Math.cos(a1), y+l1*Math.sin(a1)];
+      return [e, [e[0]+l2*Math.cos(a2), e[1]+l2*Math.sin(a2)]]; };
+    const sw=0.30*Math.sin(t*6);
+    const armL=ch(shE[0],shE[1], psi+2.15+sw, psi+2.70+sw, 22*sc, 20*sc);
+    const armR=ch(shE[0],shE[1], psi+1.15-sw, psi+0.80-sw, 22*sc, 20*sc);
+    const legL=ch(hipE[0],hipE[1], aTh+0.12, aSh+0.12, 36*sc, 34*sc);
+    const legR=ch(hipE[0],hipE[1], aTh-0.12, aSh-0.12, 36*sc, 34*sc);
+
+    /* 重心（＝各部の質量中心）が放物線の上にくるように、全体をずらす */
+    let mx=0,my=0,mm=0;
+    const add=(p,w)=>{ mx+=p[0]*w; my+=p[1]*w; mm+=w; };
+    TOR.forEach(p=>add(p,0.50/TOR.length));
+    add(head,0.08);
+    [[shE,armL[0]],[armL[0],armL[1]],[shE,armR[0]],[armR[0],armR[1]]].forEach(q=>
+      add([(q[0][0]+q[1][0])/2,(q[0][1]+q[1][1])/2],0.025));
+    [[hipE,legL[0]],[legL[0],legL[1]],[hipE,legR[0]],[legR[0],legR[1]]].forEach(q=>
+      add([(q[0][0]+q[1][0])/2,(q[0][1]+q[1][1])/2],0.08));
+    const dx=cx-mx/mm, dy=cy-my/mm;
+    const P2=(p)=>[p[0]+dx, p[1]+dy];
+
+    /* 胴 */
+    c.save(); c.beginPath();
+    TOR.forEach((p,k)=>{ const q=P2(p); k?c.lineTo(q[0],q[1]):c.moveTo(q[0],q[1]); });
+    c.strokeStyle=ink; c.lineWidth=6.5*sc; c.lineCap="round"; c.stroke(); c.restore();
+    const hd=P2(head); dot(hd[0],hd[1],8*sc,"#fff",ink,2.8);
+    const drawCh=(base,ln,col,w)=>{ const b=P2(base), e=P2(ln[0]), f=P2(ln[1]);
+      seg(b[0],b[1],e[0],e[1],col,w); seg(e[0],e[1],f[0],f[1],col,w*0.88); };
+    drawCh(shE,armL,red,3.4); drawCh(shE,armR,red,3.4);
+    drawCh(hipE,legL,blue,4.4); drawCh(hipE,legR,blue,4.4);
+
     cmMark(cx,cy);
-    label(px(0.5), 20, "手足をどう動かしても、重心は同じ放物線", "#5b6672", 12.5);
+    label(px(0.5), 20, "体はバーの上を通っても、重心（◎）はバーの下を通る", "#5b6672", 12.5);
   }
 
   if(mode==="C"){
@@ -3605,7 +3676,7 @@ function draw(cv, mode, t){
 function boot(){
   const cv=document.getElementById("cmlabcv");
   if(!cv) return;
-  let mode="A", t=0, last=0, playing=true;
+  let mode="A", t=0, last=0, playing=true, slow=false;
   const note=document.getElementById("cmlabnote");
   const btns=Array.prototype.slice.call(document.querySelectorAll("#cmlab .cmtab"));
   const setMode=(m)=>{ mode=m; t=0;
@@ -3614,11 +3685,14 @@ function boot(){
   btns.forEach(b=>b.addEventListener("click",()=>setMode(b.dataset.m)));
   const pb=document.getElementById("cmlabplay");
   if(pb) pb.addEventListener("click",()=>{ playing=!playing; pb.textContent=playing?"■ 一時停止":"▶ 再生"; });
+  const sb=document.getElementById("cmlabslow");
+  if(sb) sb.addEventListener("click",()=>{ slow=!slow;
+    sb.classList.toggle("on", slow); sb.textContent=slow?"🐢 スロー中":"🐢 スロー"; });
   setMode("A");
   function loop(ts){
     if(!last) last=ts;
     const dt=Math.min(0.05,(ts-last)/1000); last=ts;
-    if(playing) t+=dt*(mode==="C"?1:0.42);
+    if(playing) t+=dt*(mode==="C"?1:0.42)*(slow?0.25:1);
     draw(cv, mode, t);
     requestAnimationFrame(loop);
   }
